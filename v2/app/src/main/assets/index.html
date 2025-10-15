@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jeu de Dames</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 2em;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            min-width: 120px;
+        }
+
+        .btn-pvp {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .btn-bot {
+            background: #2196F3;
+            color: white;
+        }
+
+        .btn-reset {
+            background: #f44336;
+            color: white;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .status {
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            padding: 10px;
+            border-radius: 8px;
+            background: #f0f0f0;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 0;
+            aspect-ratio: 1;
+            border: 4px solid #333;
+            border-radius: 8px;
+            overflow: hidden;
+            margin: 0 auto;
+            max-width: 500px;
+        }
+
+        .square {
+            aspect-ratio: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .square.light {
+            background: #f0d9b5;
+        }
+
+        .square.dark {
+            background: #b58863;
+        }
+
+        .square.selected {
+            background: #7fc97f !important;
+        }
+
+        .square.valid-move {
+            background: #90ee90 !important;
+        }
+
+        .square.must-capture {
+            /* Removed red background */
+        }
+
+        .blown-message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 0, 0, 0.95);
+            color: white;
+            padding: 40px;
+            border-radius: 20px;
+            font-size: 28px;
+            font-weight: bold;
+            text-align: center;
+            z-index: 1000;
+            animation: blownMessageAnim 4s ease-in-out;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+        }
+
+        @keyframes blownMessageAnim {
+            0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+            10% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+            85% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(0.8); opacity: 0; }
+        }
+
+        @keyframes pulse {
+            0%, 100% { background: #ffcccc !important; }
+            50% { background: #ff9999 !important; }
+        }
+
+        @keyframes blowAway {
+            0% { transform: scale(1) rotate(0deg); opacity: 1; }
+            50% { transform: scale(1.5) rotate(180deg); opacity: 0.5; }
+            100% { transform: scale(0) rotate(360deg); opacity: 0; }
+        }
+
+        .piece {
+            width: 70%;
+            height: 70%;
+            border-radius: 50%;
+            border: 3px solid #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            font-weight: bold;
+            transition: transform 0.2s;
+        }
+
+        .piece.red {
+            background: radial-gradient(circle at 30% 30%, #ff6b6b, #c92a2a);
+            color: white;
+        }
+
+        .piece.black {
+            background: radial-gradient(circle at 30% 30%, #4a4a4a, #1a1a1a);
+            color: white;
+        }
+
+        .piece:hover {
+            transform: scale(1.1);
+        }
+
+        .piece.blown-away {
+            animation: blowAway 0.8s ease-out forwards;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 15px;
+            }
+
+            h1 {
+                font-size: 1.5em;
+            }
+
+            button {
+                padding: 10px 15px;
+                font-size: 14px;
+                min-width: 100px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🎯 Jeu de Dames</h1>
+    <div class="controls">
+        <button class="btn-pvp" onclick="startGame('pvp')">Papy contre Mamie</button>
+        <button class="btn-bot" onclick="startGame('bot')">Joueur contre le Robot Erwann</button>
+        <button class="btn-reset" onclick="resetGame()">Réinitialiser</button>
+    </div>
+    <div class="status" id="status">Sélectionnez un mode de jeu</div>
+    <div class="board" id="board"></div>
+</div>
+
+<script>
+    const ROWS = 8;
+    const COLS = 8;
+    let board = [];
+    let selectedPiece = null;
+    let currentPlayer = 'red';
+    let gameMode = null;
+    let validMoves = [];
+    let mustCapture = false;
+    let continuousCapture = false;
+    let lastMoveWasCapture = false;
+    let lastMovePos = null;
+    let playerHadCaptureAvailable = false;
+
+    function initBoard() {
+        board = Array(ROWS).fill(null).map(() => Array(COLS).fill(null));
+
+        for (let row = 0; row < 3; row++) {
+            for (let col = 0; col < COLS; col++) {
+                if ((row + col) % 2 === 1) {
+                    board[row][col] = { color: 'black', isKing: false };
+                }
+            }
+        }
+
+        for (let row = 5; row < 8; row++) {
+            for (let col = 0; col < COLS; col++) {
+                if ((row + col) % 2 === 1) {
+                    board[row][col] = { color: 'red', isKing: false };
+                }
+            }
+        }
+    }
+
+    function renderBoard() {
+        const boardEl = document.getElementById('board');
+        boardEl.innerHTML = '';
+
+        const piecesWithCaptures = [];
+        /* Removed red background highlighting */
+
+        for (let row = 0; row < ROWS; row++) {
+            for (let col = 0; col < COLS; col++) {
+                const square = document.createElement('div');
+                square.className = 'square ' + ((row + col) % 2 === 0 ? 'light' : 'dark');
+                square.dataset.row = row;
+                square.dataset.col = col;
+
+                if (selectedPiece && selectedPiece.row === row && selectedPiece.col === col) {
+                    square.classList.add('selected');
+                }
+
+                if (validMoves.some(m => m.row === row && m.col === col)) {
+                    square.classList.add('valid-move');
+                }
+
+                const piece = board[row][col];
+                if (piece) {
+                    const pieceEl = document.createElement('div');
+                    pieceEl.className = `piece ${piece.color}`;
+                    if (piece.isKing) {
+                        pieceEl.textContent = '♔';
+                    }
+                    square.appendChild(pieceEl);
+                }
+
+                square.addEventListener('click', () => handleSquareClick(row, col));
+                boardEl.appendChild(square);
+            }
+        }
+    }
+
+    function handleSquareClick(row, col) {
+        if (!gameMode) return;
+        if (gameMode === 'bot' && currentPlayer === 'black') return;
+
+        const piece = board[row][col];
+
+        console.log(`=== CLICK sur (${row}, ${col}) ===`);
+        console.log(`Joueur actuel: ${currentPlayer}`);
+        console.log(`Pièce cliquée:`, piece);
+        console.log(`playerHadCaptureAvailable au début du tour: ${playerHadCaptureAvailable}`);
+
+        if (continuousCapture && selectedPiece) {
+            const move = validMoves.find(m => m.row === row && m.col === col);
+            if (move && move.isCapture) {
+                console.log('-> Capture continue détectée');
+                makeMove(selectedPiece.row, selectedPiece.col, row, col);
+                return;
+            }
+        }
+
+        if (selectedPiece) {
+            console.log(`Pièce déjà sélectionnée: (${selectedPiece.row}, ${selectedPiece.col})`);
+            const move = validMoves.find(m => m.row === row && m.col === col);
+            if (move) {
+                console.log('-> Mouvement valide trouvé:', move);
+                const willBeCapture = Math.abs(row - selectedPiece.row) >= 2;
+
+                console.log(`-> Le joueur avait une capture disponible ce tour: ${playerHadCaptureAvailable}`);
+                console.log(`-> Va capturer: ${willBeCapture}`);
+
+                if (playerHadCaptureAvailable && !willBeCapture) {
+                    console.log('⚠️ ERREUR DÉTECTÉE: Le joueur avait une capture disponible mais ne la prend pas!');
+
+                    lastMovePos = {
+                        fromRow: selectedPiece.row,  // Position du pion fautif
+                        fromCol: selectedPiece.col,
+                        toRow: row,
+                        toCol: col
+                    };
+                    console.log('-> lastMovePos enregistré:', lastMovePos);
+                } else {
+                    lastMovePos = null;
+                    console.log('-> Pas d\'erreur, lastMovePos = null');
+                }
+
+                makeMove(selectedPiece.row, selectedPiece.col, row, col);
+            } else if (piece && piece.color === currentPlayer) {
+                console.log('-> Nouvelle pièce sélectionnée');
+                selectedPiece = { row, col };
+                validMoves = getValidMoves(row, col);
+                console.log('-> Mouvements valides:', validMoves);
+            } else {
+                console.log('-> Désélection');
+                selectedPiece = null;
+                validMoves = [];
+            }
+        } else if (piece && piece.color === currentPlayer) {
+            console.log('-> Première sélection de pièce');
+            selectedPiece = { row, col };
+            validMoves = getValidMoves(row, col);
+            console.log('-> Mouvements valides:', validMoves);
+        }
+
+        renderBoard();
+    }
+
+    function getValidMoves(row, col) {
+        const piece = board[row][col];
+        if (!piece) return [];
+
+        console.log(`\n--- GET VALID MOVES pour (${row}, ${col}) ---`);
+        console.log('Pièce:', piece);
+
+        const moves = [];
+        const captures = [];
+
+        if (piece.isKing) {
+            const directions = [[-1,-1], [-1,1], [1,-1], [1,1]];
+            for (const [dr, dc] of directions) {
+                for (let dist = 1; dist < ROWS; dist++) {
+                    const newRow = row + dr * dist;
+                    const newCol = col + dc * dist;
+
+                    if (newRow < 0 || newRow >= ROWS || newCol < 0 || newCol >= COLS) break;
+
+                    if (!board[newRow][newCol]) {
+                        moves.push({ row: newRow, col: newCol, isCapture: false });
+                    } else if (board[newRow][newCol].color !== piece.color) {
+                        for (let jumpDist = 1; jumpDist < ROWS; jumpDist++) {
+                            const jumpRow = newRow + dr * jumpDist;
+                            const jumpCol = newCol + dc * jumpDist;
+
+                            if (jumpRow < 0 || jumpRow >= ROWS || jumpCol < 0 || jumpCol >= COLS) break;
+
+                            if (!board[jumpRow][jumpCol]) {
+                                captures.push({
+                                    row: jumpRow,
+                                    col: jumpCol,
+                                    capturedRow: newRow,
+                                    capturedCol: newCol,
+                                    isCapture: true
+                                });
+                            } else {
+                                break;
+                            }
+                        }
+                        break;
+                    } else {
+                        break;
+                    }
+                }
+            }
+        } else {
+            const directions = piece.color === 'red' ? [[-1,-1], [-1,1]] : [[1,-1], [1,1]];
+
+            for (const [dr, dc] of directions) {
+                const newRow = row + dr;
+                const newCol = col + dc;
+
+                if (newRow >= 0 && newRow < ROWS && newCol >= 0 && newCol < COLS) {
+                    if (!board[newRow][newCol]) {
+                        moves.push({ row: newRow, col: newCol, isCapture: false });
+                    } else if (board[newRow][newCol].color !== piece.color) {
+                        const jumpRow = newRow + dr;
+                        const jumpCol = newCol + dc;
+                        if (jumpRow >= 0 && jumpRow < ROWS && jumpCol >= 0 && jumpCol < COLS && !board[jumpRow][jumpCol]) {
+                            captures.push({
+                                row: jumpRow,
+                                col: jumpCol,
+                                capturedRow: newRow,
+                                capturedCol: newCol,
+                                isCapture: true
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        if (captures.length > 0) {
+            const maxCaptures = findMaxCaptures(row, col, piece);
+            console.log(`-> ${captures.length} captures trouvées:`, captures);
+            console.log(`-> Max captures:`, maxCaptures);
+            return maxCaptures;
+        }
+
+        console.log(`-> ${moves.length} mouvements normaux trouvés:`, moves);
+        return moves;
+    }
+
+    function findMaxCaptures(row, col, piece, captured = [], depth = 0) {
+        const captureMoves = [];
+        const directions = piece.isKing ?
+            [[-1,-1], [-1,1], [1,-1], [1,1]] :
+            piece.color === 'red' ? [[-1,-1], [-1,1]] : [[1,-1], [1,1]];
+
+        if (piece.isKing) {
+            for (const [dr, dc] of directions) {
+                for (let dist = 1; dist < ROWS; dist++) {
+                    const enemyRow = row + dr * dist;
+                    const enemyCol = col + dc * dist;
+
+                    if (enemyRow < 0 || enemyRow >= ROWS || enemyCol < 0 || enemyCol >= COLS) break;
+
+                    if (board[enemyRow][enemyCol]) {
+                        if (board[enemyRow][enemyCol].color !== piece.color &&
+                            !captured.some(c => c.row === enemyRow && c.col === enemyCol)) {
+                            for (let jumpDist = 1; jumpDist < ROWS; jumpDist++) {
+                                const jumpRow = enemyRow + dr * jumpDist;
+                                const jumpCol = enemyCol + dc * jumpDist;
+
+                                if (jumpRow < 0 || jumpRow >= ROWS || jumpCol < 0 || jumpCol >= COLS) break;
+
+                                if (!board[jumpRow][jumpCol]) {
+                                    captureMoves.push({
+                                        row: jumpRow,
+                                        col: jumpCol,
+                                        capturedRow: enemyRow,
+                                        capturedCol: enemyCol,
+                                        isCapture: true,
+                                        captureCount: captured.length + 1
+                                    });
+                                } else {
+                                    break;
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        } else {
+            for (const [dr, dc] of directions) {
+                const enemyRow = row + dr;
+                const enemyCol = col + dc;
+
+                if (enemyRow >= 0 && enemyRow < ROWS && enemyCol >= 0 && enemyCol < COLS) {
+                    if (board[enemyRow][enemyCol] &&
+                        board[enemyRow][enemyCol].color !== piece.color &&
+                        !captured.some(c => c.row === enemyRow && c.col === enemyCol)) {
+                        const jumpRow = enemyRow + dr;
+                        const jumpCol = enemyCol + dc;
+                        if (jumpRow >= 0 && jumpRow < ROWS && jumpCol >= 0 && jumpCol < COLS && !board[jumpRow][jumpCol]) {
+                            captureMoves.push({
+                                row: jumpRow,
+                                col: jumpCol,
+                                capturedRow: enemyRow,
+                                capturedCol: enemyCol,
+                                isCapture: true,
+                                captureCount: captured.length + 1
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        if (captureMoves.length === 0) {
+            return depth === 0 ? [] : captured;
+        }
+
+        return captureMoves;
+    }
+
+    function makeMove(fromRow, fromCol, toRow, toCol) {
+        console.log(`\n=== MAKE MOVE de (${fromRow},${fromCol}) vers (${toRow},${toCol}) ===`);
+        const piece = board[fromRow][fromCol];
+        console.log('Pièce déplacée:', piece);
+
+        let wasCapture = false;
+        if (Math.abs(toRow - fromRow) >= 2) {
+            wasCapture = true;
+            console.log('-> C\'est une CAPTURE');
+        } else {
+            console.log('-> C\'est un mouvement NORMAL');
+        }
+
+        board[toRow][toCol] = piece;
+        board[fromRow][fromCol] = null;
+
+        if (wasCapture) {
+            const dr = toRow > fromRow ? 1 : -1;
+            const dc = toCol > fromCol ? 1 : -1;
+
+            if (piece.isKing) {
+                for (let i = 1; i < Math.abs(toRow - fromRow); i++) {
+                    const checkRow = fromRow + dr * i;
+                    const checkCol = fromCol + dc * i;
+                    if (board[checkRow][checkCol]) {
+                        console.log(`-> Capture de la pièce en (${checkRow}, ${checkCol})`);
+                        blowAwayPiece(checkRow, checkCol);
+                        board[checkRow][checkCol] = null;
+                        break;
+                    }
+                }
+            } else {
+                const capturedRow = (fromRow + toRow) / 2;
+                const capturedCol = (fromCol + toCol) / 2;
+                console.log(`-> Capture de la pièce en (${capturedRow}, ${capturedCol})`);
+                blowAwayPiece(capturedRow, capturedCol);
+                board[capturedRow][capturedCol] = null;
+            }
+        }
+
+        if ((piece.color === 'red' && toRow === 0) || (piece.color === 'black' && toRow === 7)) {
+            piece.isKing = true;
+            console.log('-> Promotion en DAME !');
+        }
+
+        if (wasCapture) {
+            selectedPiece = { row: toRow, col: toCol };
+            const nextCaptures = getValidMoves(toRow, toCol).filter(m => m.isCapture);
+
+            if (nextCaptures.length > 0) {
+                console.log('-> CAPTURES MULTIPLES possibles:', nextCaptures);
+                validMoves = nextCaptures;
+                continuousCapture = true;
+                updateStatus(piece.color === 'red' ? "Prise multiple ! Continuez..." : "Le robot continue...");
+                renderBoard();
+
+                if (gameMode === 'bot' && currentPlayer === 'black') {
+                    setTimeout(botMove, 700);
+                }
+                return;
+            }
+        }
+
+        selectedPiece = null;
+        validMoves = [];
+        continuousCapture = false;
+
+        console.log(`\n--- VÉRIFICATION RÈGLE SOUFFLER ---`);
+        console.log(`wasCapture: ${wasCapture}`);
+        console.log(`lastMovePos:`, lastMovePos);
+
+        if (!wasCapture && lastMovePos) {
+            console.log('🌬️ APPLICATION DE LA RÈGLE SOUFFLER !');
+            console.log(`-> Pion à souffler: (${lastMovePos.fromRow}, ${lastMovePos.fromCol})`); // Changé ici
+            console.log(`-> Joueur fautif: ${currentPlayer}`);
+            const previousPlayer = currentPlayer;
+            applyBlownRule(lastMovePos.fromRow, lastMovePos.fromCol, previousPlayer); // Changé ici
+            return;
+        } else {
+            console.log('-> Pas de règle souffler à appliquer');
+        }
+
+        currentPlayer = currentPlayer === 'red' ? 'black' : 'red';
+        console.log(`\n-> Changement de joueur: maintenant c'est ${currentPlayer}`);
+        lastMovePos = null;
+
+        playerHadCaptureAvailable = checkMustCapture();
+        console.log(`-> Le nouveau joueur (${currentPlayer}) a des captures disponibles: ${playerHadCaptureAvailable}`);
+
+        updateStatus();
+        checkWinner();
+
+        if (gameMode === 'bot' && currentPlayer === 'black') {
+            setTimeout(botMove, 500);
+        }
+    }
+
+    function blowAwayPiece(row, col) {
+        const boardEl = document.getElementById('board');
+        const squares = boardEl.children;
+        const index = row * COLS + col;
+        const square = squares[index];
+        const pieceEl = square.querySelector('.piece');
+        if (pieceEl) {
+            pieceEl.classList.add('blown-away');
+        }
+    }
+
+    function checkMustCapture() {
+        mustCapture = false;
+        for (let row = 0; row < ROWS; row++) {
+            for (let col = 0; col < COLS; col++) {
+                const piece = board[row][col];
+                if (piece && piece.color === currentPlayer) {
+                    const moves = getValidMoves(row, col);
+                    if (moves.some(m => m.isCapture)) {
+                        mustCapture = true;
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    function applyBlownRule(fromRow, fromCol) {
+        showBlownMessage();
+
+        // Supprimer immédiatement la pièce du tableau logique
+        board[fromRow][fromCol] = null;
+
+        // Attendre un peu avant de lancer l'animation pour que le message soit visible
+        setTimeout(() => {
+            const boardEl = document.getElementById('board');
+            const squares = boardEl.children;
+            const index = fromRow * COLS + fromCol;
+            const square = squares[index];
+            const pieceEl = square.querySelector('.piece');
+            if (pieceEl) {
+                pieceEl.classList.add('blown-away');
+            }
+
+            // Re-render après l'animation pour mettre à jour l'affichage
+            setTimeout(() => {
+                currentPlayer = currentPlayer === 'red' ? 'black' : 'red';
+                lastMovePos = null;
+                checkMustCapture();
+                updateStatus();
+                renderBoard();
+                checkWinner();
+
+                if (gameMode === 'bot' && currentPlayer === 'black') {
+                    setTimeout(botMove, 500);
+                }
+            }, 800); // Temps de l'animation blowAway
+        }, 500);
+    }
+
+    function showBlownMessage() {
+        const message = document.createElement('div');
+        message.className = 'blown-message';
+        message.innerHTML = "🌬️<br>Souffler n'est pas jouer !<br>Vous perdez votre pion !";
+        document.body.appendChild(message);
+
+        setTimeout(() => {
+            message.remove();
+        }, 4000);
+    }
+
+    function getAllValidMoves(color) {
+        const allMoves = [];
+        let hasCaptures = false;
+
+        for (let row = 0; row < ROWS; row++) {
+            for (let col = 0; col < COLS; col++) {
+                const piece = board[row][col];
+                if (piece && piece.color === color) {
+                    const moves = getValidMoves(row, col);
+                    if (moves.some(m => m.isCapture)) {
+                        hasCaptures = true;
+                    }
+                    moves.forEach(move => {
+                        allMoves.push({
+                            fromRow: row,
+                            fromCol: col,
+                            toRow: move.row,
+                            toCol: move.col,
+                            isCapture: move.isCapture || false
+                        });
+                    });
+                }
+            }
+        }
+
+        if (hasCaptures) {
+            return allMoves.filter(m => m.isCapture);
+        }
+
+        return allMoves;
+    }
+
+    function botMove() {
+        const move = getBestMove('black', 4);
+        if (move) {
+            makeMove(move.fromRow, move.fromCol, move.toRow, move.toCol);
+            renderBoard();
+        }
+    }
+
+    function getBestMove(color, depth) {
+        const moves = getAllValidMoves(color);
+        if (moves.length === 0) return null;
+
+        let bestScore = -Infinity;
+        let bestMove = moves[0];
+
+        for (const move of moves) {
+            const boardCopy = JSON.parse(JSON.stringify(board));
+            makeTestMove(move);
+            const score = minimax(depth - 1, false, -Infinity, Infinity, color);
+            board = boardCopy;
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestMove = move;
+            }
+        }
+
+        return bestMove;
+    }
+
+    function minimax(depth, isMaximizing, alpha, beta, color) {
+        if (depth === 0) {
+            return evaluateBoard(color);
+        }
+
+        const player = isMaximizing ? color : (color === 'red' ? 'black' : 'red');
+        const moves = getAllValidMoves(player);
+
+        if (moves.length === 0) {
+            return isMaximizing ? -10000 : 10000;
+        }
+
+        if (isMaximizing) {
+            let maxScore = -Infinity;
+            for (const move of moves) {
+                const boardCopy = JSON.parse(JSON.stringify(board));
+                makeTestMove(move);
+                const score = minimax(depth - 1, false, alpha, beta, color);
+                board = boardCopy;
+                maxScore = Math.max(maxScore, score);
+                alpha = Math.max(alpha, score);
+                if (beta <= alpha) break;
+            }
+            return maxScore;
+        } else {
+            let minScore = Infinity;
+            for (const move of moves) {
+                const boardCopy = JSON.parse(JSON.stringify(board));
+                makeTestMove(move);
+                const score = minimax(depth - 1, true, alpha, beta, color);
+                board = boardCopy;
+                minScore = Math.min(minScore, score);
+                beta = Math.min(beta, score);
+                if (beta <= alpha) break;
+            }
+            return minScore;
+        }
+    }
+
+    function makeTestMove(move) {
+        const piece = board[move.fromRow][move.fromCol];
+        board[move.toRow][move.toCol] = piece;
+        board[move.fromRow][move.fromCol] = null;
+
+        if (Math.abs(move.toRow - move.fromRow) >= 2) {
+            const dr = move.toRow > move.fromRow ? 1 : -1;
+            const dc = move.toCol > move.fromCol ? 1 : -1;
+
+            if (piece.isKing) {
+                for (let i = 1; i < Math.abs(move.toRow - move.fromRow); i++) {
+                    const checkRow = move.fromRow + dr * i;
+                    const checkCol = move.fromCol + dc * i;
+                    if (board[checkRow][checkCol]) {
+                        board[checkRow][checkCol] = null;
+                        break;
+                    }
+                }
+            } else {
+                const capturedRow = (move.fromRow + move.toRow) / 2;
+                const capturedCol = (move.fromCol + move.toCol) / 2;
+                board[capturedRow][capturedCol] = null;
+            }
+        }
+
+        if ((piece.color === 'red' && move.toRow === 0) || (piece.color === 'black' && move.toRow === 7)) {
+            piece.isKing = true;
+        }
+    }
+
+    function evaluateBoard(color) {
+        let score = 0;
+        for (let row = 0; row < ROWS; row++) {
+            for (let col = 0; col < COLS; col++) {
+                const piece = board[row][col];
+                if (piece) {
+                    const value = piece.isKing ? 30 : 10;
+                    const positionBonus = piece.color === 'black' ? row : (7 - row);
+                    if (piece.color === color) {
+                        score += value + positionBonus;
+                    } else {
+                        score -= value + positionBonus;
+                    }
+                }
+            }
+        }
+        return score;
+    }
+
+    function checkWinner() {
+        const redMoves = getAllValidMoves('red');
+        const blackMoves = getAllValidMoves('black');
+
+        if (redMoves.length === 0) {
+            if (gameMode === 'bot') {
+                updateStatus('Le Robot Erwann a gagné !');
+            } else {
+                updateStatus('Mamie a gagné !');
+            }
+            gameMode = null;
+        } else if (blackMoves.length === 0) {
+            if (gameMode === 'bot') {
+                updateStatus('Vous avez gagné !');
+            } else {
+                updateStatus('Papy a gagné !');
+            }
+            gameMode = null;
+        }
+    }
+
+    function updateStatus(message) {
+        const status = document.getElementById('status');
+        if (message) {
+            status.textContent = message;
+        } else if (gameMode === 'bot') {
+            status.textContent = currentPlayer === 'red' ? 'À vous de jouer (Rouge)' : 'Le Robot Erwann réfléchit...';
+        } else if (gameMode === 'pvp') {
+            status.textContent = currentPlayer === 'red' ? 'Tour de Papy (Rouge)' : 'Tour de Mamie (Noir)';
+        }
+    }
+
+    function startGame(mode) {
+        gameMode = mode;
+        currentPlayer = 'red';
+        selectedPiece = null;
+        validMoves = [];
+        mustCapture = false;
+        continuousCapture = false;
+        lastMovePos = null;
+        playerHadCaptureAvailable = false;
+        initBoard();
+        playerHadCaptureAvailable = checkMustCapture();
+        renderBoard();
+        updateStatus();
+    }
+
+    function resetGame() {
+        const previousMode = gameMode || 'pvp';
+        startGame(previousMode);
+    }
+
+    initBoard();
+    renderBoard();
+</script>
+</body>
+</html>

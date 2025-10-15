@@ -1,0 +1,12 @@
+
+version: "3.9"
+services:
+  buildozer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dames_buildozer
+    volumes:
+      - .:/app
+    stdin_open: true
+    tty: true
