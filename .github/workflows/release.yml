@@ -24,7 +24,7 @@ jobs:
       uses: android-actions/setup-android@v3
       
     - name: Make gradlew executable
-      run: chmod +x ./gradlew
+      run: cd v2 && chmod +x ./gradlew
       
     - name: Build Release APK
       run: |

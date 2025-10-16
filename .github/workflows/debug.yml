@@ -1,0 +1,22 @@
+
+name: Debug Project Structure
+
+on: [push]
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Debug project structure
+      run: |
+        echo "=== Project root ==="
+        ls -la
+        echo "=== v2 directory ==="
+        ls -la v2/
+        echo "=== Checking for gradlew ==="
+        find . -name "gradlew" -type f
+        echo "=== Checking Android project structure ==="
+        find v2 -name "build.gradle" -o -name "AndroidManifest.xml" | head -10
