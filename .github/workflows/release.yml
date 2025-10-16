@@ -6,6 +6,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,17 +26,15 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       
-    - name: Make gradlew executable
-      run: cd v2 && chmod +x ./gradlew
-      
     - name: Build Release APK
       run: |
         cd v2
+        chmod +x ./gradlew
         ./gradlew assembleRelease
-      
+        
     - name: Upload APK to Release
-      uses: softprops/action-gh-release@v1
+      uses: ncipollo/release-action@v1
       with:
-        files: v2/app/build/outputs/apk/release/app-release.apk
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        tag: ${{ github.ref_name }}
+        artifacts: "v2/app/build/outputs/apk/**/*.apk"
+        token: ${{ secrets.GITHUB_TOKEN }}
