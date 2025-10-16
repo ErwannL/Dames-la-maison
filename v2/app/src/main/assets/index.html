@@ -236,9 +236,7 @@
     let validMoves = [];
     let mustCapture = false;
     let continuousCapture = false;
-    let lastMoveWasCapture = false;
-    let lastMovePos = null;
-    let playerHadCaptureAvailable = false;
+    let piecesThatCouldCapture = []; // Tableau pour stocker TOUTES les pièces qui pouvaient capturer
 
     function initBoard() {
         board = Array(ROWS).fill(null).map(() => Array(COLS).fill(null));
@@ -263,9 +261,6 @@
     function renderBoard() {
         const boardEl = document.getElementById('board');
         boardEl.innerHTML = '';
-
-        const piecesWithCaptures = [];
-        /* Removed red background highlighting */
 
         for (let row = 0; row < ROWS; row++) {
             for (let col = 0; col < COLS; col++) {
@@ -307,7 +302,7 @@
         console.log(`=== CLICK sur (${row}, ${col}) ===`);
         console.log(`Joueur actuel: ${currentPlayer}`);
         console.log(`Pièce cliquée:`, piece);
-        console.log(`playerHadCaptureAvailable au début du tour: ${playerHadCaptureAvailable}`);
+        console.log(`Pièces qui pouvaient capturer:`, piecesThatCouldCapture);
 
         if (continuousCapture && selectedPiece) {
             const move = validMoves.find(m => m.row === row && m.col === col);
@@ -323,26 +318,6 @@
             const move = validMoves.find(m => m.row === row && m.col === col);
             if (move) {
                 console.log('-> Mouvement valide trouvé:', move);
-                const willBeCapture = Math.abs(row - selectedPiece.row) >= 2;
-
-                console.log(`-> Le joueur avait une capture disponible ce tour: ${playerHadCaptureAvailable}`);
-                console.log(`-> Va capturer: ${willBeCapture}`);
-
-                if (playerHadCaptureAvailable && !willBeCapture) {
-                    console.log('⚠️ ERREUR DÉTECTÉE: Le joueur avait une capture disponible mais ne la prend pas!');
-
-                    lastMovePos = {
-                        fromRow: selectedPiece.row,  // Position du pion fautif
-                        fromCol: selectedPiece.col,
-                        toRow: row,
-                        toCol: col
-                    };
-                    console.log('-> lastMovePos enregistré:', lastMovePos);
-                } else {
-                    lastMovePos = null;
-                    console.log('-> Pas d\'erreur, lastMovePos = null');
-                }
-
                 makeMove(selectedPiece.row, selectedPiece.col, row, col);
             } else if (piece && piece.color === currentPlayer) {
                 console.log('-> Nouvelle pièce sélectionnée');
@@ -367,9 +342,6 @@
     function getValidMoves(row, col) {
         const piece = board[row][col];
         if (!piece) return [];
-
-        console.log(`\n--- GET VALID MOVES pour (${row}, ${col}) ---`);
-        console.log('Pièce:', piece);
 
         const moves = [];
         const captures = [];
@@ -439,12 +411,9 @@
 
         if (captures.length > 0) {
             const maxCaptures = findMaxCaptures(row, col, piece);
-            console.log(`-> ${captures.length} captures trouvées:`, captures);
-            console.log(`-> Max captures:`, maxCaptures);
             return maxCaptures;
         }
 
-        console.log(`-> ${moves.length} mouvements normaux trouvés:`, moves);
         return moves;
     }
 
@@ -525,7 +494,6 @@
     function makeMove(fromRow, fromCol, toRow, toCol) {
         console.log(`\n=== MAKE MOVE de (${fromRow},${fromCol}) vers (${toRow},${toCol}) ===`);
         const piece = board[fromRow][fromCol];
-        console.log('Pièce déplacée:', piece);
 
         let wasCapture = false;
         if (Math.abs(toRow - fromRow) >= 2) {
@@ -591,14 +559,20 @@
 
         console.log(`\n--- VÉRIFICATION RÈGLE SOUFFLER ---`);
         console.log(`wasCapture: ${wasCapture}`);
-        console.log(`lastMovePos:`, lastMovePos);
+        console.log(`piecesThatCouldCapture:`, piecesThatCouldCapture);
 
-        if (!wasCapture && lastMovePos) {
+        // Appliquer la règle souffler si le joueur n'a pas fait de capture alors qu'il pouvait
+        if (!wasCapture && piecesThatCouldCapture.length > 0) {
             console.log('🌬️ APPLICATION DE LA RÈGLE SOUFFLER !');
-            console.log(`-> Pion à souffler: (${lastMovePos.fromRow}, ${lastMovePos.fromCol})`); // Changé ici
+
+            // Choisir une pièce au hasard parmi celles qui pouvaient capturer
+            const randomIndex = Math.floor(Math.random() * piecesThatCouldCapture.length);
+            const pieceToBlow = piecesThatCouldCapture[randomIndex];
+
+            console.log(`-> Pion à souffler: (${pieceToBlow.row}, ${pieceToBlow.col})`);
             console.log(`-> Joueur fautif: ${currentPlayer}`);
-            const previousPlayer = currentPlayer;
-            applyBlownRule(lastMovePos.fromRow, lastMovePos.fromCol, previousPlayer); // Changé ici
+
+            applyBlownRule(pieceToBlow.row, pieceToBlow.col);
             return;
         } else {
             console.log('-> Pas de règle souffler à appliquer');
@@ -606,10 +580,11 @@
 
         currentPlayer = currentPlayer === 'red' ? 'black' : 'red';
         console.log(`\n-> Changement de joueur: maintenant c'est ${currentPlayer}`);
-        lastMovePos = null;
 
-        playerHadCaptureAvailable = checkMustCapture();
-        console.log(`-> Le nouveau joueur (${currentPlayer}) a des captures disponibles: ${playerHadCaptureAvailable}`);
+        // Réinitialiser pour le prochain tour
+        piecesThatCouldCapture = [];
+        checkMustCapture(); // Cette fonction remplit piecesThatCouldCapture
+        console.log(`-> Le nouveau joueur (${currentPlayer}) a des captures disponibles: ${piecesThatCouldCapture.length > 0}`);
 
         updateStatus();
         checkWinner();
@@ -632,6 +607,8 @@
 
     function checkMustCapture() {
         mustCapture = false;
+        piecesThatCouldCapture = []; // Réinitialiser la liste
+
         for (let row = 0; row < ROWS; row++) {
             for (let col = 0; col < COLS; col++) {
                 const piece = board[row][col];
@@ -639,21 +616,18 @@
                     const moves = getValidMoves(row, col);
                     if (moves.some(m => m.isCapture)) {
                         mustCapture = true;
-                        return true;
+                        // Ajouter cette pièce à la liste des pièces qui pouvaient capturer
+                        piecesThatCouldCapture.push({ row, col });
                     }
                 }
             }
         }
-        return false;
+        return mustCapture;
     }
 
     function applyBlownRule(fromRow, fromCol) {
         showBlownMessage();
 
-        // Supprimer immédiatement la pièce du tableau logique
-        board[fromRow][fromCol] = null;
-
-        // Attendre un peu avant de lancer l'animation pour que le message soit visible
         setTimeout(() => {
             const boardEl = document.getElementById('board');
             const squares = boardEl.children;
@@ -663,21 +637,21 @@
             if (pieceEl) {
                 pieceEl.classList.add('blown-away');
             }
-
-            // Re-render après l'animation pour mettre à jour l'affichage
-            setTimeout(() => {
-                currentPlayer = currentPlayer === 'red' ? 'black' : 'red';
-                lastMovePos = null;
-                checkMustCapture();
-                updateStatus();
-                renderBoard();
-                checkWinner();
-
-                if (gameMode === 'bot' && currentPlayer === 'black') {
-                    setTimeout(botMove, 500);
-                }
-            }, 800); // Temps de l'animation blowAway
         }, 500);
+
+        setTimeout(() => {
+            board[fromRow][fromCol] = null;
+            currentPlayer = currentPlayer === 'red' ? 'black' : 'red';
+            piecesThatCouldCapture = [];
+            checkMustCapture();
+            updateStatus();
+            renderBoard();
+            checkWinner();
+
+            if (gameMode === 'bot' && currentPlayer === 'black') {
+                setTimeout(botMove, 500);
+            }
+        }, 4000);
     }
 
     function showBlownMessage() {
@@ -880,10 +854,9 @@
         validMoves = [];
         mustCapture = false;
         continuousCapture = false;
-        lastMovePos = null;
-        playerHadCaptureAvailable = false;
+        piecesThatCouldCapture = [];
         initBoard();
-        playerHadCaptureAvailable = checkMustCapture();
+        checkMustCapture();
         renderBoard();
         updateStatus();
     }
