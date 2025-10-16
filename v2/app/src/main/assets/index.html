@@ -236,7 +236,7 @@
     let validMoves = [];
     let mustCapture = false;
     let continuousCapture = false;
-    let piecesThatCouldCapture = []; // Tableau pour stocker TOUTES les pièces qui pouvaient capturer
+    let piecesThatCouldCapture = [];
 
     function initBoard() {
         board = Array(ROWS).fill(null).map(() => Array(COLS).fill(null));
@@ -302,13 +302,22 @@
         console.log(`=== CLICK sur (${row}, ${col}) ===`);
         console.log(`Joueur actuel: ${currentPlayer}`);
         console.log(`Pièce cliquée:`, piece);
-        console.log(`Pièces qui pouvaient capturer:`, piecesThatCouldCapture);
+        console.log(`Continuous capture: ${continuousCapture}`);
 
+        // Si on est en mode capture continue, on vérifie d'abord si on clique sur un mouvement de capture
         if (continuousCapture && selectedPiece) {
+            console.log('-> Mode capture continue actif');
             const move = validMoves.find(m => m.row === row && m.col === col);
             if (move && move.isCapture) {
                 console.log('-> Capture continue détectée');
                 makeMove(selectedPiece.row, selectedPiece.col, row, col);
+                return;
+            } else {
+                console.log('-> Mouvement non valide en capture continue, désélection');
+                selectedPiece = null;
+                validMoves = [];
+                continuousCapture = false;
+                renderBoard();
                 return;
             }
         }
@@ -503,6 +512,7 @@
             console.log('-> C\'est un mouvement NORMAL');
         }
 
+        // Déplacer la pièce
         board[toRow][toCol] = piece;
         board[fromRow][fromCol] = null;
 
@@ -530,17 +540,19 @@
             }
         }
 
+        // Promotion en dame
         if ((piece.color === 'red' && toRow === 0) || (piece.color === 'black' && toRow === 7)) {
             piece.isKing = true;
             console.log('-> Promotion en DAME !');
         }
 
+        // Vérifier les captures multiples
         if (wasCapture) {
-            selectedPiece = { row: toRow, col: toCol };
             const nextCaptures = getValidMoves(toRow, toCol).filter(m => m.isCapture);
 
             if (nextCaptures.length > 0) {
                 console.log('-> CAPTURES MULTIPLES possibles:', nextCaptures);
+                selectedPiece = { row: toRow, col: toCol };
                 validMoves = nextCaptures;
                 continuousCapture = true;
                 updateStatus(piece.color === 'red' ? "Prise multiple ! Continuez..." : "Le robot continue...");
@@ -549,10 +561,11 @@
                 if (gameMode === 'bot' && currentPlayer === 'black') {
                     setTimeout(botMove, 700);
                 }
-                return;
+                return; // On reste sur le même tour pour la capture suivante
             }
         }
 
+        // Si pas de capture multiple, on termine le tour
         selectedPiece = null;
         validMoves = [];
         continuousCapture = false;
@@ -578,12 +591,13 @@
             console.log('-> Pas de règle souffler à appliquer');
         }
 
+        // Changer de joueur
         currentPlayer = currentPlayer === 'red' ? 'black' : 'red';
         console.log(`\n-> Changement de joueur: maintenant c'est ${currentPlayer}`);
 
         // Réinitialiser pour le prochain tour
         piecesThatCouldCapture = [];
-        checkMustCapture(); // Cette fonction remplit piecesThatCouldCapture
+        checkMustCapture();
         console.log(`-> Le nouveau joueur (${currentPlayer}) a des captures disponibles: ${piecesThatCouldCapture.length > 0}`);
 
         updateStatus();
@@ -592,6 +606,8 @@
         if (gameMode === 'bot' && currentPlayer === 'black') {
             setTimeout(botMove, 500);
         }
+
+        renderBoard();
     }
 
     function blowAwayPiece(row, col) {
@@ -607,7 +623,7 @@
 
     function checkMustCapture() {
         mustCapture = false;
-        piecesThatCouldCapture = []; // Réinitialiser la liste
+        piecesThatCouldCapture = [];
 
         for (let row = 0; row < ROWS; row++) {
             for (let col = 0; col < COLS; col++) {
@@ -616,7 +632,6 @@
                     const moves = getValidMoves(row, col);
                     if (moves.some(m => m.isCapture)) {
                         mustCapture = true;
-                        // Ajouter cette pièce à la liste des pièces qui pouvaient capturer
                         piecesThatCouldCapture.push({ row, col });
                     }
                 }
