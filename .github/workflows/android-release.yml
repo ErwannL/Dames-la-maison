@@ -1,5 +1,5 @@
 
-name: Build Android APK  # ⬅️ Nom que tu veux
+name: Build Android APK
 
 on:
   push:
@@ -31,6 +31,14 @@ jobs:
         cd v2
         chmod +x ./gradlew
         ./gradlew assembleRelease
+        
+    - name: Delete existing release (if any)
+      uses: dev-drprasad/delete-tag-and-release@v1.0
+      if: failure()
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag: ${{ github.ref_name }}
         
     - name: Upload APK to Release
       uses: ncipollo/release-action@v1
