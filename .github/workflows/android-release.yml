@@ -1,4 +1,3 @@
-
 name: Build Android APK
 
 on:
@@ -28,7 +27,7 @@ jobs:
       
     - name: Generate signing key
       run: |
-        cd v2
+        cd v2/app
         keytool -genkey -v \
           -keystore release-keystore.jks \
           -alias release-alias \
@@ -43,11 +42,10 @@ jobs:
       run: |
         cd v2
         chmod +x ./gradlew
+        SIGNING_STORE_PASSWORD=password \
+        SIGNING_KEY_PASSWORD=password \
+        SIGNING_KEY_ALIAS=release-alias \
         ./gradlew assembleRelease
-        env:
-          SIGNING_STORE_PASSWORD: password
-          SIGNING_KEY_PASSWORD: password
-          SIGNING_KEY_ALIAS: release-alias
 
     - name: Delete existing release
       uses: dev-drprasad/delete-tag-and-release@v1.0
