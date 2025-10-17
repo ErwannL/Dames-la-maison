@@ -34,10 +34,10 @@ jobs:
 
     - name: Delete existing release (if any)
       uses: dev-drprasad/delete-tag-and-release@v1.0
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag: ${{ github.ref_name }}
+        github_token: ${{ secrets.GITHUB_TOKEN }}  # ⬅️ CORRIGÉ
+        tag_name: ${{ github.ref_name }}           # ⬅️ CORRIGÉ
+        delete_release: true                       # ⬅️ AJOUTÉ
 
     - name: Rename APK
       run: |
