@@ -26,27 +26,44 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       
-    - name: Build Signed APK
+    - name: Generate signing key
+      run: |
+        cd v2
+        keytool -genkey -v \
+          -keystore release-keystore.jks \
+          -alias release-alias \
+          -keyalg RSA \
+          -keysize 2048 \
+          -validity 10000 \
+          -storepass password \
+          -keypass password \
+          -dname "CN=Android, OU=Android, O=Android, L=Unknown, ST=Unknown, C=US"
+      
+    - name: Build Signed Release APK
       run: |
         cd v2
         chmod +x ./gradlew
-        ./gradlew assembleDebug
+        ./gradlew assembleRelease
+        env:
+          SIGNING_STORE_PASSWORD: password
+          SIGNING_KEY_PASSWORD: password
+          SIGNING_KEY_ALIAS: release-alias
 
-    - name: Delete existing release (if any)
+    - name: Delete existing release
       uses: dev-drprasad/delete-tag-and-release@v1.0
       with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}  # ⬅️ CORRIGÉ
-        tag_name: ${{ github.ref_name }}           # ⬅️ CORRIGÉ
-        delete_release: true                       # ⬅️ AJOUTÉ
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        tag_name: ${{ github.ref_name }}
+        delete_release: true
 
     - name: Rename APK
       run: |
-        cd v2/app/build/outputs/apk/debug
-        cp app-debug.apk DamesLaMaison-v${{ github.ref_name }}.apk
+        cd v2/app/build/outputs/apk/release
+        cp app-release.apk DamesLaMaison-v${{ github.ref_name }}.apk
         
     - name: Upload APK to Release
       uses: ncipollo/release-action@v1
       with:
         tag: ${{ github.ref_name }}
-        artifacts: "v2/app/build/outputs/apk/debug/DamesLaMaison-v${{ github.ref_name }}.apk"
+        artifacts: "v2/app/build/outputs/apk/release/DamesLaMaison-v${{ github.ref_name }}.apk"
         token: ${{ secrets.GITHUB_TOKEN }}

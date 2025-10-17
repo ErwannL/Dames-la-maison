@@ -5,21 +5,31 @@ plugins {
 
 android {
     namespace = "com.example.damemaison"
-    compileSdk = 36  // ⬅️ CHANGE de 34 à 36
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.example.damemaison"
         minSdk = 21
-        targetSdk = 36  // ⬅️ CHANGE aussi à 36
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            // Clé de signature automatique pour GitHub Actions
+            storeFile = file("release-keystore.jks")
+            storePassword = System.getenv("SIGNING_STORE_PASSWORD") ?: "password"
+            keyAlias = System.getenv("SIGNING_KEY_ALIAS") ?: "alias"
+            keyPassword = System.getenv("SIGNING_KEY_PASSWORD") ?: "password"
+        }
+    }
+
     buildTypes {
-        release {
+        getByName("release") {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
