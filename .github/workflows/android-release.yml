@@ -26,12 +26,12 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       
-    - name: Build Release APK
+    - name: Build Signed APK (avec signature debug)
       run: |
         cd v2
         chmod +x ./gradlew
-        ./gradlew assembleRelease
-        
+        ./gradlew assembleDebug  # ⬅️ CHANGE à assembleDebug pour avoir un APK signé
+
     - name: Delete existing release (if any)
       uses: dev-drprasad/delete-tag-and-release@v1.0
       if: failure()
@@ -46,9 +46,14 @@ jobs:
         ls -la v2/app/build/outputs/apk/
         ls -la v2/app/build/outputs/apk/release/
 
+    - name: Rename APK
+      run: |
+        cd v2/app/build/outputs/apk/debug
+        cp app-debug.apk DamesLaMaison-v${{ github.ref_name }}.apk
+        
     - name: Upload APK to Release
       uses: ncipollo/release-action@v1
       with:
         tag: ${{ github.ref_name }}
-        artifacts: "v2/app/build/outputs/apk/release/*.apk"
+        artifacts: "v2/app/build/outputs/apk/debug/DamesLaMaison-v${{ github.ref_name }}.apk"
         token: ${{ secrets.GITHUB_TOKEN }}
