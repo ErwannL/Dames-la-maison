@@ -26,25 +26,18 @@ jobs:
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
       
-    - name: Build Signed APK (avec signature debug)
+    - name: Build Signed APK
       run: |
         cd v2
         chmod +x ./gradlew
-        ./gradlew assembleDebug  # ⬅️ CHANGE à assembleDebug pour avoir un APK signé
+        ./gradlew assembleDebug
 
     - name: Delete existing release (if any)
       uses: dev-drprasad/delete-tag-and-release@v1.0
-      if: failure()
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag: ${{ github.ref_name }}
-
-    - name: List files to debug
-      run: |
-        find . -name "*.apk" -type f
-        ls -la v2/app/build/outputs/apk/
-        ls -la v2/app/build/outputs/apk/release/
 
     - name: Rename APK
       run: |
