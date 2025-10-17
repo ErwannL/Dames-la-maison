@@ -39,10 +39,16 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag: ${{ github.ref_name }}
-        
+
+    - name: List files to debug
+      run: |
+        find . -name "*.apk" -type f
+        ls -la v2/app/build/outputs/apk/
+        ls -la v2/app/build/outputs/apk/release/
+
     - name: Upload APK to Release
       uses: ncipollo/release-action@v1
       with:
         tag: ${{ github.ref_name }}
-        artifacts: "v2/app/build/outputs/apk/release/app-release.apk"
+        artifacts: "v2/app/build/outputs/apk/release/*.apk"
         token: ${{ secrets.GITHUB_TOKEN }}
