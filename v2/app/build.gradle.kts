@@ -5,12 +5,12 @@ plugins {
 
 android {
     namespace = "com.example.damemaison"
-    compileSdk = 34  // ⬅️ Utilise "=" et pas "version ="
+    compileSdk = 36  // ⬅️ CHANGE de 34 à 36
 
     defaultConfig {
         applicationId = "com.example.damemaison"
         minSdk = 21
-        targetSdk = 34
+        targetSdk = 36  // ⬅️ CHANGE aussi à 36
         versionCode = 1
         versionName = "1.0"
 

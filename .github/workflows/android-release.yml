@@ -1,5 +1,5 @@
 
-name: Build Android APK
+name: Build Android APK  # ⬅️ Nom que tu veux
 
 on:
   push:
@@ -38,4 +38,3 @@ jobs:
         tag: ${{ github.ref_name }}
         artifacts: "v2/app/build/outputs/apk/release/app-release.apk"
         token: ${{ secrets.GITHUB_TOKEN }}
-  
