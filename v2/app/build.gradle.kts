@@ -1,26 +1,16 @@
+
 plugins {
     alias(libs.plugins.android.application)
 }
 
 android {
-    signingConfigs {
-        release {
-            storeFile file('keystore.jks')
-            storePassword System.getenv('KEYSTORE_PASSWORD')
-            keyAlias System.getenv('KEY_ALIAS')
-            keyPassword System.getenv('KEY_PASSWORD')
-        }
-    }
-
     namespace = "com.example.damemaison"
-    compileSdk {
-        version = release(36)
-    }
+    compileSdk 34  // ⬅️ Corrigé cette ligne
 
     defaultConfig {
         applicationId = "com.example.damemaison"
         minSdk = 21
-        targetSdk = 36
+        targetSdk = 34  // ⬅️ Augmente la version
         versionCode = 1
         versionName = "1.0"
 
@@ -29,9 +19,14 @@ android {
 
     buildTypes {
         release {
-            // Pour l'instant on utilise debug signing
+            // ⬇️ SUPPRIME la configuration de signature pour l'instant
             signingConfig signingConfigs.debug
             minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        
+        debug {
+            signingConfig signingConfigs.debug
         }
     }
 
