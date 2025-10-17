@@ -5,12 +5,12 @@ plugins {
 
 android {
     namespace = "com.example.damemaison"
-    compileSdk 34  // ⬅️ Corrigé cette ligne
+    compileSdk = 34  // ⬅️ Utilise "=" et pas "version ="
 
     defaultConfig {
         applicationId = "com.example.damemaison"
         minSdk = 21
-        targetSdk = 34  // ⬅️ Augmente la version
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0"
 
@@ -19,14 +19,11 @@ android {
 
     buildTypes {
         release {
-            // ⬇️ SUPPRIME la configuration de signature pour l'instant
-            signingConfig signingConfigs.debug
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-        }
-        
-        debug {
-            signingConfig signingConfigs.debug
+            isMinifyEnabled = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 
