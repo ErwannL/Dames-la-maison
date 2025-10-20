@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - 'v*'
+  # allow manual runs from the Actions UI to debug or re-run for a tag
+  workflow_dispatch:
 
 permissions:
   contents: write
