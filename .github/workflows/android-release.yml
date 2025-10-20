@@ -65,3 +65,22 @@ jobs:
         tag: ${{ github.ref_name }}
         artifacts: "v2/app/build/outputs/apk/release/DamesLaMaison-v${{ github.ref_name }}.apk"
         token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Publish Release
+      if: always()
+      run: |
+        API="https://api.github.com/repos/${{ github.repository }}"
+        TAG="${{ github.ref_name }}"
+        echo "Looking up release for tag $TAG"
+        RELEASE_JSON=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "$API/releases/tags/$TAG")
+        RELEASE_ID=$(echo "$RELEASE_JSON" | jq -r .id)
+        if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
+          echo "No release found for tag $TAG. Exiting with success (nothing to publish)."
+        else
+          echo "Publishing release id=$RELEASE_ID"
+          curl -s -X PATCH -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Content-Type: application/json" \
+            -d '{"draft":false,"prerelease":false}' "$API/releases/$RELEASE_ID" | jq .
+        fi
+      shell: bash
+        draft: false
+        prerelease: false
