@@ -7,25 +7,27 @@
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
-    <!-- Cover image: place your image as res/drawable/cover.png or res/drawable-nodpi/cover.png -->
-    <ImageView
-        android:id="@+id/coverImage"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:scaleType="centerCrop"
-        android:contentDescription="Cover image"
-        android:src="@drawable/cover"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
 
-    <!-- WebView sits under/behind the cover; when page finishes loading the cover will be hidden -->
+    <!-- WebView sits below the cover. Declare it first so ImageView renders on top. -->
     <WebView
         android:id="@+id/webView"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:background="@android:color/transparent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- Cover image: place your image as res/drawable/cover.jpg or res/drawable-nodpi/cover.jpg -->
+    <ImageView
+        android:id="@+id/coverImage"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:scaleType="centerCrop"
+        android:clickable="false"
+        android:contentDescription="Cover image"
+        android:src="@drawable/cover"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent"
