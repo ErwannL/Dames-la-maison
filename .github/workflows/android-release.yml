@@ -67,6 +67,8 @@ jobs:
         tag: ${{ github.ref_name }}
         artifacts: "v2/app/build/outputs/apk/release/DamesLaMaison-v${{ github.ref_name }}.apk"
         token: ${{ secrets.GITHUB_TOKEN }}
+        draft: false
+        prerelease: false
 
     - name: Publish Release
       if: always()
@@ -84,5 +86,3 @@ jobs:
             -d '{"draft":false,"prerelease":false}' "$API/releases/$RELEASE_ID" | jq .
         fi
       shell: bash
-        draft: false
-        prerelease: false
