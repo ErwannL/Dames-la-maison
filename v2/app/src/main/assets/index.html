@@ -28,7 +28,15 @@
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
             max-width: 600px;
             width: 100%;
+            position: relative;
         }
+
+        /* Header layout */
+    .app-header { display:flex;flex-direction:column; gap:10px; margin-bottom:14px }
+    .header-top { display:flex;align-items:center;justify-content:space-between }
+    .header-bottom { display:flex;justify-content:center }
+    .title-left h1 { margin:0;font-size:1.4rem;color:#111; }
+    .header-bottom .controls { display:flex;gap:10px }
 
         h1 {
             text-align: center;
@@ -128,7 +136,8 @@
         }
 
         .square.must-capture {
-            /* Removed red background */
+            /* Indicator for mandatory-capture squares (subtle outline) */
+            box-shadow: inset 0 0 0 4px rgba(255, 0, 0, 0.06);
         }
 
         .blown-message {
@@ -216,11 +225,22 @@
 </head>
 <body>
 <div class="container">
-    <h1>🎯 Jeu de Dames</h1>
-    <div class="controls">
-        <button class="btn-pvp" id="btn-play-together">Jouer à deux</button>
-        <button class="btn-bot" id="btn-play-solo">Jouer en solo contre le Robot Erwann</button>
-        <button class="btn-reset" onclick="resetGame()">Réinitialiser</button>
+    <div class="app-header">
+        <div class="header-top">
+            <div class="title-left">
+                <h1>🎯 Jeu de Dames</h1>
+            </div>
+            <div class="header-gear">
+                <button id="btn-settings" class="settings-gear" title="Paramètres" aria-label="Paramètres">⚙️</button>
+            </div>
+        </div>
+        <div class="header-bottom">
+            <div class="controls">
+                <button class="btn-pvp" id="btn-play-together">Jouer à deux</button>
+                <button class="btn-bot" id="btn-play-solo">Jouer en solo</button>
+                <button class="btn-reset" id="btn-reset" onclick="resetGame()">Réinitialiser</button>
+            </div>
+        </div>
     </div>
     <div class="status" id="status">Sélectionnez un mode de jeu</div>
     <div class="board" id="board"></div>
@@ -233,6 +253,40 @@
         <div class="modal-buttons">
             <button id="choosePapy" class="btn-modal">Papy (Rouge)</button>
             <button id="chooseMamie" class="btn-modal">Mamie (Noir)</button>
+        </div>
+    </div>
+</div>
+
+<!-- Settings modal -->
+<div id="settingsModal" class="modal" style="display:none;">
+    <div class="modal-content settings-content">
+        <div class="settings-header">
+                <button id="settings-cancel" class="settings-x" aria-label="Annuler">✕</button>
+                <h2>Paramètres</h2>
+            </div>
+        <div class="settings-body">
+            <div class="settings-row">
+                <label class="settings-label">Autoriser mouvement arrière (pour pions)</label>
+                <input type="checkbox" id="settings-backward" />
+            </div>
+            <div class="settings-row">
+                <label class="settings-label">Activer règle "Souffler n'est pas jouer"</label>
+                <input type="checkbox" id="settings-souffler" checked />
+            </div>
+            <div class="settings-row">
+                <label class="settings-label">Niveau du Robot</label>
+                <div>
+                    <select id="settings-bot-level" class="settings-select">
+                        <option value="easy">easy (aléatoire)</option>
+                        <option value="medium" selected>normal (stratégique)</option>
+                        <option value="hard">difficile (implacable)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="settings-actions">
+            <button id="settings-save" class="btn-modal">Enregistrer</button>
+            <button id="settings-cancel-2" class="btn-modal">Annuler</button>
         </div>
     </div>
 </div>
@@ -262,6 +316,49 @@
         box-shadow: 0 10px 30px rgba(0,0,0,0.3);
     }
 
+    /* Settings modal overrides */
+    .settings-content {
+        max-width: 460px;
+        width: 92%;
+        background: #ffffff;
+        border-radius: 12px;
+        padding: 20px 22px;
+        box-shadow: 0 18px 50px rgba(15,20,25,0.12);
+        text-align: left;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    .settings-header { display:flex;align-items:center;justify-content:space-between;margin-bottom:12px; }
+    .settings-header h2 { margin:0; font-size:18px; color:#0f1724 }
+    .settings-body { display:flex;flex-direction:column; gap:14px; margin-top:4px; }
+    .settings-row { display:flex;justify-content:space-between;align-items:center; }
+    .settings-label { font-size:15px;color:#0f1724; max-width:78%; }
+    .settings-select { padding:8px 10px;border-radius:8px;border:1px solid #e6e9ee; background:#fff }
+    .settings-actions { display:flex;justify-content:flex-end;gap:10px;margin-top:16px }
+
+    /* Gear button placed inline in header */
+    .header-gear { display:flex; align-items:center; }
+    .settings-gear { width:40px; height:40px; border-radius:8px; display:flex;align-items:center;justify-content:center; background:#fff;border:1px solid #eef2f6; cursor:pointer; font-size:16px }
+    .settings-gear:hover { box-shadow:0 8px 18px rgba(16,24,40,0.06); transform: translateY(-2px); }
+
+    /* Ultra-clean modal adjustments */
+    .settings-content { background:#FF7FD1; border:1px solid #FF7A00 }
+    .settings-label { color:#000 }
+    .settings-select { border:1px solid #ffddee; background: #fff }
+    .btn-modal { border-radius:8px;padding:8px 12px;border:none;cursor:pointer }
+    .btn-modal[style] { box-shadow:none }
+    .btn-modal:hover { opacity:0.95 }
+    /* Close cross (top-right) should be transparent bg with orange glyph */
+    #settings-cancel { background: transparent; border: none; color: #FF7A00; }
+    /* Cancel action button remains orange with white text */
+    #settings-cancel-2 { background:#FF7A00;border:none;color:white }
+    #settings-save { background:#7c4dff;color:white }
+
+    /* removed accent bar */
+    .settings-x { position:absolute; right:14px; top:8px; background:transparent;border:none;font-size:18px;color:#FF7A00; width:30px; height:30px; display:flex;align-items:center;justify-content:center; z-index:5 }
+    .settings-header { position:relative; display:flex;align-items:center;justify-content:flex-start;margin-bottom:8px }
+    .settings-header h2 { color:#000;margin:0;padding-left:6px }
+
     .modal-buttons {
         display: flex;
         gap: 12px;
@@ -270,12 +367,12 @@
     }
 
     .btn-modal {
-        padding: 10px 14px;
-        border-radius: 8px;
-        border: none;
-        cursor: pointer;
-        font-weight: bold;
-        min-width: 110px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-weight: bold;
+    min-width: 110px;
     }
 
     #choosePapy { background: #4CAF50; color: white; }
@@ -293,6 +390,51 @@
     let mustCapture = false;
     let continuousCapture = false;
     let piecesThatCouldCapture = [];
+    // Configuration flags controllées par l'UI
+    const CONFIG = {
+        allowBackwardMoves: false,
+        enableSoufflerRule: true
+        ,botLevel: 'medium' // 'easy' | 'medium' | 'hard'
+    };
+
+    // --- Zobrist hashing for transposition cache (faster and smaller keys than JSON stringify)
+    const ZOBRIST = {
+        table: null,
+        sideRandom: 0,
+        init() {
+            // piece types: 0 empty, 1 red man, 2 red king, 3 black man, 4 black king
+            this.table = [];
+            for (let r = 0; r < ROWS; r++) {
+                this.table[r] = [];
+                for (let c = 0; c < COLS; c++) {
+                    this.table[r][c] = [];
+                    for (let k = 0; k < 5; k++) {
+                        this.table[r][c][k] = this.random32();
+                    }
+                }
+            }
+            this.sideRandom = this.random32();
+        },
+        random32() {
+            // return a 32-bit unsigned integer
+            return Math.floor(Math.random() * 0x100000000) >>> 0;
+        },
+        computeKey(b) {
+            let h = 0 >>> 0;
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const p = b[r][c];
+                    if (!p) continue;
+                    let idx = 0;
+                    if (p.color === 'red') idx = p.isKing ? 2 : 1;
+                    else idx = p.isKing ? 4 : 3;
+                    h = (h ^ this.table[r][c][idx]) >>> 0;
+                }
+            }
+            return h;
+        }
+    };
+    ZOBRIST.init();
     // Persisted choice: who is the human when playing vs bot or who starts when playing together
     let persistedHumanColor = 'red'; // 'red' or 'black' - default red
     let persistedStarter = undefined; // 'red' or 'black' - who started last (persist across resets)
@@ -456,7 +598,12 @@
                 }
             }
         } else {
-            const directions = piece.color === 'red' ? [[-1,-1], [-1,1]] : [[1,-1], [1,1]];
+            // For normal pieces, allow forward moves by default. If CONFIG.allowBackwardMoves is true,
+            // allow the opposite directions as well.
+            let directions = piece.color === 'red' ? [[-1,-1], [-1,1]] : [[1,-1], [1,1]];
+            if (CONFIG.allowBackwardMoves) {
+                directions = [[-1,-1], [-1,1], [1,-1], [1,1]];
+            }
 
             for (const [dr, dc] of directions) {
                 const newRow = row + dr;
@@ -494,68 +641,71 @@
         const captureMoves = [];
         const directions = piece.isKing ?
             [[-1,-1], [-1,1], [1,-1], [1,1]] :
-            piece.color === 'red' ? [[-1,-1], [-1,1]] : [[1,-1], [1,1]];
+            (CONFIG.allowBackwardMoves ? [[-1,-1], [-1,1], [1,-1], [1,1]] : (piece.color === 'red' ? [[-1,-1], [-1,1]] : [[1,-1], [1,1]]));
 
-        if (piece.isKing) {
-            for (const [dr, dc] of directions) {
-                for (let dist = 1; dist < ROWS; dist++) {
-                    const enemyRow = row + dr * dist;
-                    const enemyCol = col + dc * dist;
+            if (piece.isKing) {
+                // For kings, we scan along each diagonal to find an enemy and possible landing squares after it.
+                for (const [dr, dc] of directions) {
+                    for (let dist = 1; dist < ROWS; dist++) {
+                        const enemyRow = row + dr * dist;
+                        const enemyCol = col + dc * dist;
 
-                    if (enemyRow < 0 || enemyRow >= ROWS || enemyCol < 0 || enemyCol >= COLS) break;
+                        if (enemyRow < 0 || enemyRow >= ROWS || enemyCol < 0 || enemyCol >= COLS) break;
 
-                    if (board[enemyRow][enemyCol]) {
-                        if (board[enemyRow][enemyCol].color !== piece.color &&
-                            !captured.some(c => c.row === enemyRow && c.col === enemyCol)) {
-                            for (let jumpDist = 1; jumpDist < ROWS; jumpDist++) {
-                                const jumpRow = enemyRow + dr * jumpDist;
-                                const jumpCol = enemyCol + dc * jumpDist;
+                        if (board[enemyRow][enemyCol]) {
+                            if (board[enemyRow][enemyCol].color !== piece.color &&
+                                !captured.some(c => c.row === enemyRow && c.col === enemyCol)) {
+                                // After the enemy, king may land any empty square beyond it along same direction
+                                for (let jumpDist = 1; jumpDist < ROWS; jumpDist++) {
+                                    const jumpRow = enemyRow + dr * jumpDist;
+                                    const jumpCol = enemyCol + dc * jumpDist;
 
-                                if (jumpRow < 0 || jumpRow >= ROWS || jumpCol < 0 || jumpCol >= COLS) break;
+                                    if (jumpRow < 0 || jumpRow >= ROWS || jumpCol < 0 || jumpCol >= COLS) break;
 
-                                if (!board[jumpRow][jumpCol]) {
-                                    captureMoves.push({
-                                        row: jumpRow,
-                                        col: jumpCol,
-                                        capturedRow: enemyRow,
-                                        capturedCol: enemyCol,
-                                        isCapture: true,
-                                        captureCount: captured.length + 1
-                                    });
-                                } else {
-                                    break;
+                                    if (!board[jumpRow][jumpCol]) {
+                                        captureMoves.push({
+                                            row: jumpRow,
+                                            col: jumpCol,
+                                            capturedRow: enemyRow,
+                                            capturedCol: enemyCol,
+                                            isCapture: true,
+                                            captureCount: captured.length + 1
+                                        });
+                                    } else if (board[jumpRow][jumpCol]) {
+                                        // blocked beyond enemy
+                                        break;
+                                    }
                                 }
                             }
+                            break; // whether enemy or ally, stop scanning further in this direction
                         }
-                        break;
                     }
                 }
-            }
-        } else {
-            for (const [dr, dc] of directions) {
-                const enemyRow = row + dr;
-                const enemyCol = col + dc;
+            } else {
+                for (const [dr, dc] of directions) {
+                    const enemyRow = row + dr;
+                    const enemyCol = col + dc;
 
-                if (enemyRow >= 0 && enemyRow < ROWS && enemyCol >= 0 && enemyCol < COLS) {
-                    if (board[enemyRow][enemyCol] &&
-                        board[enemyRow][enemyCol].color !== piece.color &&
-                        !captured.some(c => c.row === enemyRow && c.col === enemyCol)) {
-                        const jumpRow = enemyRow + dr;
-                        const jumpCol = enemyCol + dc;
-                        if (jumpRow >= 0 && jumpRow < ROWS && jumpCol >= 0 && jumpCol < COLS && !board[jumpRow][jumpCol]) {
-                            captureMoves.push({
-                                row: jumpRow,
-                                col: jumpCol,
-                                capturedRow: enemyRow,
-                                capturedCol: enemyCol,
-                                isCapture: true,
-                                captureCount: captured.length + 1
-                            });
+                    if (enemyRow >= 0 && enemyRow < ROWS && enemyCol >= 0 && enemyCol < COLS) {
+                        if (board[enemyRow][enemyCol] &&
+                            board[enemyRow][enemyCol].color !== piece.color &&
+                            !captured.some(c => c.row === enemyRow && c.col === enemyCol)) {
+                            const jumpRow = enemyRow + dr;
+                            const jumpCol = enemyCol + dc;
+                            if (jumpRow >= 0 && jumpRow < ROWS && jumpCol >= 0 && jumpCol < COLS && !board[jumpRow][jumpCol]) {
+                                captureMoves.push({
+                                    row: jumpRow,
+                                    col: jumpCol,
+                                    capturedRow: enemyRow,
+                                    capturedCol: enemyCol,
+                                    isCapture: true,
+                                    captureCount: captured.length + 1
+                                });
+                            }
                         }
                     }
                 }
             }
-        }
 
         if (captureMoves.length === 0) {
             return depth === 0 ? [] : captured;
@@ -569,39 +719,42 @@
         const piece = board[fromRow][fromCol];
 
         let wasCapture = false;
-        if (Math.abs(toRow - fromRow) >= 2) {
-            wasCapture = true;
-            console.log('-> C\'est une CAPTURE');
+        // Determine if this move actually captures a piece by checking squares between from and to.
+        const dr = Math.sign(toRow - fromRow);
+        const dc = Math.sign(toCol - fromCol);
+        let capturedSquare = null;
+        if (Math.abs(toRow - fromRow) >= 2 || Math.abs(toCol - fromCol) >= 2) {
+            // scan along the path for an enemy piece
+            for (let step = 1; step < Math.max(Math.abs(toRow - fromRow), Math.abs(toCol - fromCol)); step++) {
+                const r = fromRow + dr * step;
+                const c = fromCol + dc * step;
+                if (r < 0 || r >= ROWS || c < 0 || c >= COLS) break;
+                if (board[r][c]) {
+                    if (board[r][c].color !== piece.color) {
+                        capturedSquare = { row: r, col: c };
+                        wasCapture = true;
+                        console.log(`-> C'est une CAPTURE de la pièce en (${r}, ${c})`);
+                        break;
+                    } else {
+                        // blocked by own piece
+                        break;
+                    }
+                }
+            }
         } else {
-            console.log('-> C\'est un mouvement NORMAL');
+            console.log("-> C'est un mouvement NORMAL");
         }
 
         // Déplacer la pièce
         board[toRow][toCol] = piece;
         board[fromRow][fromCol] = null;
 
-        if (wasCapture) {
-            const dr = toRow > fromRow ? 1 : -1;
-            const dc = toCol > fromCol ? 1 : -1;
-
-            if (piece.isKing) {
-                for (let i = 1; i < Math.abs(toRow - fromRow); i++) {
-                    const checkRow = fromRow + dr * i;
-                    const checkCol = fromCol + dc * i;
-                    if (board[checkRow][checkCol]) {
-                        console.log(`-> Capture de la pièce en (${checkRow}, ${checkCol})`);
-                        blowAwayPiece(checkRow, checkCol);
-                        board[checkRow][checkCol] = null;
-                        break;
-                    }
-                }
-            } else {
-                const capturedRow = (fromRow + toRow) / 2;
-                const capturedCol = (fromCol + toCol) / 2;
-                console.log(`-> Capture de la pièce en (${capturedRow}, ${capturedCol})`);
-                blowAwayPiece(capturedRow, capturedCol);
-                board[capturedRow][capturedCol] = null;
-            }
+        if (wasCapture && capturedSquare) {
+            const cr = capturedSquare.row;
+            const cc = capturedSquare.col;
+            console.log(`-> Capture confirmée de la pièce en (${cr}, ${cc})`);
+            blowAwayPiece(cr, cc);
+            board[cr][cc] = null;
         }
 
         // Promotion en dame
@@ -642,8 +795,8 @@
         console.log(`wasCapture: ${wasCapture}`);
         console.log(`piecesThatCouldCapture:`, piecesThatCouldCapture);
 
-        // Appliquer la règle souffler si le joueur n'a pas fait de capture alors qu'il pouvait
-        if (!wasCapture && piecesThatCouldCapture.length > 0) {
+        // Appliquer la règle souffler si activée et si le joueur n'a pas fait de capture alors qu'il pouvait
+        if (CONFIG.enableSoufflerRule && !wasCapture && piecesThatCouldCapture.length > 0) {
             console.log('🌬️ APPLICATION DE LA RÈGLE SOUFFLER !');
 
             // Choisir une pièce au hasard parmi celles qui pouvaient capturer
@@ -656,7 +809,7 @@
             applyBlownRule(pieceToBlow.row, pieceToBlow.col);
             return;
         } else {
-            console.log('-> Pas de règle souffler à appliquer');
+            console.log('-> Pas de règle souffler à appliquer (désactivée ou pas de faute)');
         }
 
         // Changer de joueur
@@ -814,24 +967,150 @@
 
     function botMove() {
         const botColor = persistedHumanColor === 'red' ? 'black' : 'red';
-        const move = getBestMove(botColor, 4);
+        let move = null;
+        if (CONFIG.botLevel === 'easy') {
+            // choose a random legal move
+            const moves = getAllValidMoves(botColor);
+            if (moves.length === 0) return;
+            move = moves[Math.floor(Math.random() * moves.length)];
+        } else if (CONFIG.botLevel === 'medium') {
+            move = getBestMove(botColor, 4);
+        } else if (CONFIG.botLevel === 'hard') {
+            // use iterative deepening with time limit for hard level
+            // increase time budget and depth for much stronger play
+            move = getBestMoveTimed(botColor, 12, 5000); // 5s max
+        } else {
+            move = getBestMove(botColor, 4);
+        }
+
         if (move) {
             makeMove(move.fromRow, move.fromCol, move.toRow, move.toCol);
             renderBoard();
         }
     }
 
-    function getBestMove(color, depth) {
+    // Iterative deepening with transposition cache and move ordering
+    function getBestMoveTimed(color, maxDepth, timeLimitMs) {
         const moves = getAllValidMoves(color);
         if (moves.length === 0) return null;
 
-        let bestScore = -Infinity;
+        function moveHeuristic(m) {
+            let s = 0;
+            if (m.isCapture) s += 100;
+            const to = board[m.toRow] && board[m.toRow][m.toCol];
+            if (to && to.isKing) s += 20;
+            return s;
+        }
+        moves.sort((a,b) => moveHeuristic(b) - moveHeuristic(a));
+
+        const transposition = new Map();
+        const startTime = Date.now();
+        let bestOverall = moves[0];
+        // Quiescence search (capture-only extension)
+        function quiescence(alpha, beta, color, startTime, timeLimit) {
+            const stand = evaluateBoard(color);
+            if (stand >= beta) return beta;
+            if (alpha < stand) alpha = stand;
+            // generate capture moves only
+            const captures = getAllValidMoves(color).filter(m => m.isCapture);
+            for (const mv of captures) {
+                if (Date.now() - startTime > timeLimit) break;
+                const copy = JSON.parse(JSON.stringify(board));
+                makeTestMove(mv);
+                const score = -quiescence(-beta, -alpha, (color === 'red' ? 'black' : 'red'), startTime, timeLimit);
+                board = copy;
+                if (score >= beta) return beta;
+                if (score > alpha) alpha = score;
+            }
+            return alpha;
+        }
+
+        function minimaxWithCache(d, isMax, alpha, beta, rootColor) {
+            const key = ZOBRIST.computeKey(board) ^ (rootColor === 'red' ? 0 : 0);
+            const entry = transposition.get(key);
+            if (entry && entry.depth >= d) return entry.score;
+
+            // timeout check
+            if (Date.now() - startTime > timeLimitMs) return evaluateBoard(rootColor);
+
+            let val;
+            if (d === 0) {
+                // quiescence at leaf
+                val = quiescence(alpha, beta, rootColor, startTime, timeLimitMs);
+            } else {
+                val = minimax(d, isMax, alpha, beta, rootColor);
+            }
+
+            transposition.set(key, { depth: d, score: val });
+            return val;
+        }
+
+        for (let depth = 1; depth <= maxDepth; depth++) {
+            if (Date.now() - startTime > timeLimitMs) break;
+            let bestScore = -Infinity;
+            let bestMove = null;
+
+            for (const move of moves) {
+                if (Date.now() - startTime > timeLimitMs) break;
+                const boardCopy = JSON.parse(JSON.stringify(board));
+                makeTestMove(move);
+                const score = minimaxWithCache(depth - 1, false, -Infinity, Infinity, color);
+                board = boardCopy;
+
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMove = move;
+                }
+            }
+
+            if (bestMove) bestOverall = bestMove;
+        }
+
+        return bestOverall;
+    }
+
+    function getBestMove(color, depth) {
+        // For performance, use move ordering (captures first, then kings)
+        const moves = getAllValidMoves(color);
+        if (moves.length === 0) return null;
+
+        function scoreMoveHeuristic(m) {
+            let score = 0;
+            if (m.isCapture) score += 100;
+            const toPiece = board[m.toRow] && board[m.toRow][m.toCol];
+            if (toPiece && toPiece.isKing) score += 20;
+            return score;
+        }
+
+        moves.sort((a,b) => scoreMoveHeuristic(b) - scoreMoveHeuristic(a));
+
         let bestMove = moves[0];
+        let bestScore = -Infinity;
+
+    // Simple transposition cache using Zobrist keys
+    const transposition = new Map();
+    const startTime = Date.now();
+    const timeLimit = 2000; // safety cap when called directly
+
+        function minimaxWithCache(d, isMax, alpha, beta, rootColor) {
+            const key = ZOBRIST.computeKey(board);
+            if (transposition.has(key) && transposition.get(key).depth >= d) {
+                return transposition.get(key).score;
+            }
+
+            if (Date.now() - startTime > timeLimit) {
+                return evaluateBoard(rootColor);
+            }
+
+            const val = minimax(d, isMax, alpha, beta, rootColor);
+            transposition.set(key, { depth: d, score: val });
+            return val;
+        }
 
         for (const move of moves) {
             const boardCopy = JSON.parse(JSON.stringify(board));
             makeTestMove(move);
-            const score = minimax(depth - 1, false, -Infinity, Infinity, color);
+            const score = minimax(depth - 1, false, -Infinity, Infinity, color, transposition, startTime, timeLimit);
             board = boardCopy;
 
             if (score > bestScore) {
@@ -843,7 +1122,12 @@
         return bestMove;
     }
 
-    function minimax(depth, isMaximizing, alpha, beta, color) {
+    // minimax with optional transposition cache and time budget
+    function minimax(depth, isMaximizing, alpha, beta, color, transpositionMap = null, startTime = 0, timeLimit = Infinity) {
+        if (Date.now() - startTime > timeLimit) {
+            return evaluateBoard(color);
+        }
+
         if (depth === 0) {
             return evaluateBoard(color);
         }
@@ -860,7 +1144,7 @@
             for (const move of moves) {
                 const boardCopy = JSON.parse(JSON.stringify(board));
                 makeTestMove(move);
-                const score = minimax(depth - 1, false, alpha, beta, color);
+                const score = minimax(depth - 1, false, alpha, beta, color, transpositionMap, startTime, timeLimit);
                 board = boardCopy;
                 maxScore = Math.max(maxScore, score);
                 alpha = Math.max(alpha, score);
@@ -872,7 +1156,7 @@
             for (const move of moves) {
                 const boardCopy = JSON.parse(JSON.stringify(board));
                 makeTestMove(move);
-                const score = minimax(depth - 1, true, alpha, beta, color);
+                const score = minimax(depth - 1, true, alpha, beta, color, transpositionMap, startTime, timeLimit);
                 board = boardCopy;
                 minScore = Math.min(minScore, score);
                 beta = Math.min(beta, score);
@@ -928,6 +1212,10 @@
                 }
             }
         }
+        // mobility bonus: number of moves for 'color' minus opponent
+        const myMoves = getAllValidMoves(color).length;
+        const oppMoves = getAllValidMoves(color === 'red' ? 'black' : 'red').length;
+        score += (myMoves - oppMoves) * 2;
         return score;
     }
 
@@ -969,6 +1257,13 @@
         persistedStarter = undefined;
         startGame.startingPlayer = undefined;
         gameMode = null;
+    // reset config and UI toggles
+    CONFIG.allowBackwardMoves = false;
+    CONFIG.enableSoufflerRule = true;
+    const tb = document.getElementById('settings-backward');
+    const ts = document.getElementById('settings-souffler');
+    if (tb) tb.checked = CONFIG.allowBackwardMoves;
+    if (ts) ts.checked = CONFIG.enableSoufflerRule;
 
         // Reinitialize board/UI to initial state
         initBoard();
@@ -1041,6 +1336,13 @@
         persistedHumanColor = 'red';
         persistedHumanLabel = 'Papy';
         gameMode = null;
+    // reset config UI to defaults
+    CONFIG.allowBackwardMoves = false;
+    CONFIG.enableSoufflerRule = true;
+    const tb = document.getElementById('settings-backward');
+    const ts = document.getElementById('settings-souffler');
+    if (tb) tb.checked = CONFIG.allowBackwardMoves;
+    if (ts) ts.checked = CONFIG.enableSoufflerRule;
         // Close modal if open
         hideModal();
         // Reinitialize board/UI but do not auto-start a game; user will choose mode and starter again
@@ -1168,6 +1470,59 @@
 
     initBoard();
     renderBoard();
+
+    // Wire settings modal UI
+    const btnSettings = document.getElementById('btn-settings');
+    const settingsModal = document.getElementById('settingsModal');
+    const settingsClose = document.getElementById('settings-close');
+    const settingsBackward = document.getElementById('settings-backward');
+    const settingsSouffler = document.getElementById('settings-souffler');
+    const settingsBotLevel = document.getElementById('settings-bot-level');
+    const settingsSave = document.getElementById('settings-save');
+    const settingsCancel = document.getElementById('settings-cancel');
+    const settingsCancel2 = document.getElementById('settings-cancel-2');
+
+    if (btnSettings) {
+        btnSettings.addEventListener('click', () => {
+            if (settingsModal) settingsModal.style.display = 'flex';
+            // set UI from CONFIG
+            if (settingsBackward) settingsBackward.checked = CONFIG.allowBackwardMoves;
+            if (settingsSouffler) settingsSouffler.checked = CONFIG.enableSoufflerRule;
+            if (settingsBotLevel) settingsBotLevel.value = CONFIG.botLevel || 'medium';
+        });
+    }
+
+    function closeSettingsModal() {
+        if (settingsModal) settingsModal.style.display = 'none';
+    }
+
+    // Save button applies settings
+    if (settingsSave) {
+        settingsSave.addEventListener('click', () => {
+            if (settingsBackward) CONFIG.allowBackwardMoves = settingsBackward.checked;
+            if (settingsSouffler) CONFIG.enableSoufflerRule = settingsSouffler.checked;
+            if (settingsBotLevel) CONFIG.botLevel = settingsBotLevel.value;
+            console.log('CONFIG updated', CONFIG);
+            // Recompute visuals / state
+            selectedPiece = null;
+            validMoves = [];
+            renderBoard();
+            closeSettingsModal();
+        });
+    }
+
+    // Cancel buttons simply close without applying
+    if (settingsCancel) settingsCancel.addEventListener('click', closeSettingsModal);
+    if (settingsCancel2) settingsCancel2.addEventListener('click', closeSettingsModal);
+
+    // Close settings modal on outside click
+    if (settingsModal) {
+        settingsModal.addEventListener('click', (e) => {
+            if (e.target === settingsModal) {
+                settingsModal.style.display = 'none';
+            }
+        });
+    }
 </script>
 </body>
 </html>
