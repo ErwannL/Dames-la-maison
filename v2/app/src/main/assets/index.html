@@ -218,13 +218,69 @@
 <div class="container">
     <h1>🎯 Jeu de Dames</h1>
     <div class="controls">
-        <button class="btn-pvp" onclick="startGame('pvp')">Papy contre Mamie</button>
-        <button class="btn-bot" onclick="startGame('bot')">Joueur contre le Robot Erwann</button>
+        <button class="btn-pvp" id="btn-play-together">Jouer à deux</button>
+        <button class="btn-bot" id="btn-play-solo">Jouer en solo contre le Robot Erwann</button>
         <button class="btn-reset" onclick="resetGame()">Réinitialiser</button>
     </div>
     <div class="status" id="status">Sélectionnez un mode de jeu</div>
     <div class="board" id="board"></div>
 </div>
+
+<!-- Modal for choosing who starts / who plays -->
+<div id="choiceModal" class="modal" style="display:none;">
+    <div class="modal-content">
+        <h2 id="modalTitle">Qui commence ?</h2>
+        <div class="modal-buttons">
+            <button id="choosePapy" class="btn-modal">Papy (Rouge)</button>
+            <button id="chooseMamie" class="btn-modal">Mamie (Noir)</button>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Modal styles */
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2000;
+    }
+
+    .modal-content {
+        background: white;
+        padding: 24px;
+        border-radius: 12px;
+        text-align: center;
+        max-width: 320px;
+        width: 90%;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
+
+    .modal-buttons {
+        display: flex;
+        gap: 12px;
+        margin-top: 16px;
+        justify-content: center;
+    }
+
+    .btn-modal {
+        padding: 10px 14px;
+        border-radius: 8px;
+        border: none;
+        cursor: pointer;
+        font-weight: bold;
+        min-width: 110px;
+    }
+
+    #choosePapy { background: #4CAF50; color: white; }
+    #chooseMamie { background: #2196F3; color: white; }
+</style>
 
 <script>
     const ROWS = 8;
@@ -237,6 +293,10 @@
     let mustCapture = false;
     let continuousCapture = false;
     let piecesThatCouldCapture = [];
+    // Persisted choice: who is the human when playing vs bot or who starts when playing together
+    let persistedHumanColor = 'red'; // 'red' or 'black' - default red
+    let persistedStarter = undefined; // 'red' or 'black' - who started last (persist across resets)
+    let timeouts = [];
 
     function initBoard() {
         board = Array(ROWS).fill(null).map(() => Array(COLS).fill(null));
@@ -295,7 +355,11 @@
 
     function handleSquareClick(row, col) {
         if (!gameMode) return;
-        if (gameMode === 'bot' && currentPlayer === 'black') return;
+        // If playing vs bot, ignore clicks when it's not the human's turn
+        if (gameMode === 'bot') {
+            const botColor = persistedHumanColor === 'red' ? 'black' : 'red';
+            if (currentPlayer === botColor) return;
+        }
 
         const piece = board[row][col];
 
@@ -558,8 +622,12 @@
                 updateStatus(piece.color === 'red' ? "Prise multiple ! Continuez..." : "Le robot continue...");
                 renderBoard();
 
-                if (gameMode === 'bot' && currentPlayer === 'black') {
-                    setTimeout(botMove, 700);
+                if (gameMode === 'bot') {
+                    const botColor = persistedHumanColor === 'red' ? 'black' : 'red';
+                    if (currentPlayer === botColor) {
+                        const t = setTimeout(botMove, 700);
+                        timeouts.push(t);
+                    }
                 }
                 return; // On reste sur le même tour pour la capture suivante
             }
@@ -603,8 +671,12 @@
         updateStatus();
         checkWinner();
 
-        if (gameMode === 'bot' && currentPlayer === 'black') {
-            setTimeout(botMove, 500);
+        if (gameMode === 'bot') {
+            const botColor = persistedHumanColor === 'red' ? 'black' : 'red';
+            if (currentPlayer === botColor) {
+                const t = setTimeout(botMove, 500);
+                timeouts.push(t);
+            }
         }
 
         renderBoard();
@@ -641,32 +713,59 @@
     }
 
     function applyBlownRule(fromRow, fromCol) {
+        // Show message first, then animate the piece away after message removed
         showBlownMessage();
 
-        setTimeout(() => {
+        // After the message disappears (4s), animate piece and then remove it
+        const t1 = setTimeout(() => {
             const boardEl = document.getElementById('board');
             const squares = boardEl.children;
             const index = fromRow * COLS + fromCol;
             const square = squares[index];
-            const pieceEl = square.querySelector('.piece');
+            const pieceEl = square ? square.querySelector('.piece') : null;
             if (pieceEl) {
+                // Add animation class
                 pieceEl.classList.add('blown-away');
-            }
-        }, 500);
+                // After animation ends (~0.8s), remove the piece from board model and DOM
+                const t2 = setTimeout(() => {
+                    board[fromRow][fromCol] = null;
+                    // update turn and state
+                    currentPlayer = currentPlayer === 'red' ? 'black' : 'red';
+                    piecesThatCouldCapture = [];
+                    checkMustCapture();
+                    updateStatus();
+                    renderBoard();
+                    checkWinner();
 
-        setTimeout(() => {
-            board[fromRow][fromCol] = null;
-            currentPlayer = currentPlayer === 'red' ? 'black' : 'red';
-            piecesThatCouldCapture = [];
-            checkMustCapture();
-            updateStatus();
-            renderBoard();
-            checkWinner();
+                    if (gameMode === 'bot') {
+                        const botColor = persistedHumanColor === 'red' ? 'black' : 'red';
+                        if (currentPlayer === botColor) {
+                            const t3 = setTimeout(botMove, 500);
+                            timeouts.push(t3);
+                        }
+                    }
+                }, 900);
+                timeouts.push(t2);
+            } else {
+                // If there's no piece element in DOM, still remove from model and advance turn
+                board[fromRow][fromCol] = null;
+                currentPlayer = currentPlayer === 'red' ? 'black' : 'red';
+                piecesThatCouldCapture = [];
+                checkMustCapture();
+                updateStatus();
+                renderBoard();
+                checkWinner();
 
-            if (gameMode === 'bot' && currentPlayer === 'black') {
-                setTimeout(botMove, 500);
+                if (gameMode === 'bot') {
+                    const botColor = persistedHumanColor === 'red' ? 'black' : 'red';
+                    if (currentPlayer === botColor) {
+                        const t3 = setTimeout(botMove, 500);
+                        timeouts.push(t3);
+                    }
+                }
             }
-        }, 4000);
+        }, 4100);
+        timeouts.push(t1);
     }
 
     function showBlownMessage() {
@@ -674,10 +773,11 @@
         message.className = 'blown-message';
         message.innerHTML = "🌬️<br>Souffler n'est pas jouer !<br>Vous perdez votre pion !";
         document.body.appendChild(message);
-
-        setTimeout(() => {
+        const t = setTimeout(() => {
             message.remove();
         }, 4000);
+        timeouts.push(t);
+        return t;
     }
 
     function getAllValidMoves(color) {
@@ -713,7 +813,8 @@
     }
 
     function botMove() {
-        const move = getBestMove('black', 4);
+        const botColor = persistedHumanColor === 'red' ? 'black' : 'red';
+        const move = getBestMove(botColor, 4);
         if (move) {
             makeMove(move.fromRow, move.fromCol, move.toRow, move.toCol);
             renderBoard();
@@ -841,6 +942,9 @@
                 updateStatus('Mamie a gagné !');
             }
             gameMode = null;
+            // After showing the winner for a short time, reset app to initial state
+            const t = setTimeout(() => initializeAppState(), 3000);
+            timeouts.push(t);
         } else if (blackMoves.length === 0) {
             if (gameMode === 'bot') {
                 updateStatus('Vous avez gagné !');
@@ -848,7 +952,35 @@
                 updateStatus('Papy a gagné !');
             }
             gameMode = null;
+            const t = setTimeout(() => initializeAppState(), 3000);
+            timeouts.push(t);
         }
+    }
+
+    function initializeAppState() {
+        // Cancel any pending timeouts
+        while (timeouts.length) {
+            clearTimeout(timeouts.pop());
+        }
+
+        // Reset all persisted choices and temporary state to initial app start values
+        persistedHumanColor = 'red';
+        persistedHumanLabel = 'Papy';
+        persistedStarter = undefined;
+        startGame.startingPlayer = undefined;
+        gameMode = null;
+
+        // Reinitialize board/UI to initial state
+        initBoard();
+        selectedPiece = null;
+        validMoves = [];
+        mustCapture = false;
+        continuousCapture = false;
+        piecesThatCouldCapture = [];
+        currentPlayer = 'red';
+        renderBoard();
+        updateStatus('Sélectionnez un mode de jeu');
+        hideModal();
     }
 
     function updateStatus(message) {
@@ -856,15 +988,25 @@
         if (message) {
             status.textContent = message;
         } else if (gameMode === 'bot') {
-            status.textContent = currentPlayer === 'red' ? 'À vous de jouer (Rouge)' : 'Le Robot Erwann réfléchit...';
+            const botColor = persistedHumanColor === 'red' ? 'black' : 'red';
+            if (currentPlayer === persistedHumanColor) {
+                status.textContent = `À vous de jouer (${persistedHumanLabel})`;
+            } else if (currentPlayer === botColor) {
+                status.textContent = 'Le Robot Erwann réfléchit...';
+            }
         } else if (gameMode === 'pvp') {
             status.textContent = currentPlayer === 'red' ? 'Tour de Papy (Rouge)' : 'Tour de Mamie (Noir)';
         }
     }
 
     function startGame(mode) {
+        // mode can be 'pvp' or 'bot'. This function may be called with an explicit starting player by other code.
         gameMode = mode;
-        currentPlayer = 'red';
+        // If a persistedHumanColor was set (from the modal), use it as the starting player for human-side modes.
+        // For pvp (play together) persistedHumanColor represents who starts (red or black).
+    // Always use explicit startingPlayer when provided; otherwise default to persistedHumanColor.
+    // Do NOT auto-use persistedStarter here so the starter modal can be shown each new game.
+    currentPlayer = (typeof startGame.startingPlayer !== 'undefined') ? startGame.startingPlayer : persistedHumanColor;
         selectedPiece = null;
         validMoves = [];
         mustCapture = false;
@@ -874,11 +1016,154 @@
         checkMustCapture();
         renderBoard();
         updateStatus();
+        // If playing against the bot and the bot starts, let it play immediately
+        if (gameMode === 'bot') {
+            const botColor = persistedHumanColor === 'red' ? 'black' : 'red';
+            if (currentPlayer === botColor) {
+                const t = setTimeout(botMove, 500);
+                timeouts.push(t);
+            }
+        }
     }
 
     function resetGame() {
         const previousMode = gameMode || 'pvp';
-        startGame(previousMode);
+        // When resetting, reuse the persistedHumanColor choice so the user's choice remains.
+        // Clear any stored starting preference so the modal flow repeats each new game
+        startGame.startingPlayer = undefined;
+        // Clear persistedStarter so the next game prompts again
+        persistedStarter = undefined;
+        // Cancel any pending timeouts
+        while (timeouts.length) {
+            clearTimeout(timeouts.pop());
+        }
+        // Reset persisted choices as user requested full reset
+        persistedHumanColor = 'red';
+        persistedHumanLabel = 'Papy';
+        gameMode = null;
+        // Close modal if open
+        hideModal();
+        // Reinitialize board/UI but do not auto-start a game; user will choose mode and starter again
+        initBoard();
+        selectedPiece = null;
+        validMoves = [];
+        mustCapture = false;
+        continuousCapture = false;
+        piecesThatCouldCapture = [];
+        currentPlayer = 'red';
+        renderBoard();
+        updateStatus('Sélectionnez un mode de jeu');
+    }
+
+    // --- Modal and button wiring ---
+    const btnPlayTogether = document.getElementById('btn-play-together');
+    const btnPlaySolo = document.getElementById('btn-play-solo');
+    const modal = document.getElementById('choiceModal');
+    const modalTitle = document.getElementById('modalTitle');
+    let choosePapy = document.getElementById('choosePapy');
+    let chooseMamie = document.getElementById('chooseMamie');
+
+    let modalContext = null; // 'pvp' or 'bot'
+    let persistedHumanLabel = 'Papy';
+
+    btnPlayTogether.addEventListener('click', () => {
+        modalContext = 'pvp';
+        // ensure previous starter isn't reused so modal always prompts
+        startGame.startingPlayer = undefined;
+        persistedStarter = undefined;
+        // Show normal Papy/Mamie choice to decide who starts
+        // Ensure the modal buttons run the first-step handlers
+        choosePapy.onclick = firstStepPapy;
+        chooseMamie.onclick = firstStepMamie;
+        choosePapy.textContent = 'Papy (Rouge)';
+        chooseMamie.textContent = 'Mamie (Noir)';
+        modalTitle.textContent = 'Qui commence ?';
+        showModal();
+    });
+
+    btnPlaySolo.addEventListener('click', () => {
+        modalContext = 'bot';
+        // ensure previous starter isn't reused so modal always prompts
+        startGame.startingPlayer = undefined;
+        persistedStarter = undefined;
+        // In bot mode, first choose which label represents the human; human will always be RED.
+        // Ensure the modal buttons run the first-step handlers
+        choosePapy.onclick = firstStepPapy;
+        chooseMamie.onclick = firstStepMamie;
+        choosePapy.textContent = 'Papy (Rouge)';
+        chooseMamie.textContent = 'Mamie (Rouge)';
+        modalTitle.textContent = 'Qui jouera contre le Robot Erwann ?';
+        showModal();
+    });
+
+    // Define first-step handlers for the modal buttons (Papy / Mamie)
+    function firstStepPapy() {
+        if (modalContext === 'pvp') {
+            // Papy starts as RED
+            persistedHumanColor = 'red';
+            startGame.startingPlayer = 'red';
+            persistedStarter = 'red';
+            hideModal();
+            startGame('pvp');
+            return;
+        }
+
+        // Bot mode: human label = Papy, human color = RED
+        persistedHumanLabel = 'Papy';
+        persistedHumanColor = 'red';
+        // Next ask who starts (player or bot)
+        showStarterModal();
+    }
+
+    function firstStepMamie() {
+        if (modalContext === 'pvp') {
+            // Mamie starts as BLACK
+            persistedHumanColor = 'black';
+            startGame.startingPlayer = 'black';
+            persistedStarter = 'black';
+            hideModal();
+            startGame('pvp');
+            return;
+        }
+
+        // Bot mode: human label = Mamie, but human color is still RED (user wants to play as Mamie but keep RED)
+        persistedHumanLabel = 'Mamie';
+        persistedHumanColor = 'red';
+        // Next ask who starts (player or bot)
+        showStarterModal();
+    }
+
+    // Attach these as the default first-step handlers when the modal is shown by Play buttons
+    // (btnPlayTogether and btnPlaySolo set choosePapy.onclick/chooseMamie.onclick below)
+
+    function showStarterModal() {
+        modalTitle.textContent = 'Qui commence ?';
+        // Configure buttons for the starter choice step (player vs bot)
+        choosePapy.textContent = `Le joueur (${persistedHumanLabel})`;
+        chooseMamie.textContent = 'Le Robot Erwann';
+
+        // Replace onclick handlers for this step
+        choosePapy.onclick = () => {
+            hideModal();
+            startGame.startingPlayer = 'red';
+            persistedStarter = 'red';
+            startGame('bot');
+        };
+
+        chooseMamie.onclick = () => {
+            hideModal();
+            startGame.startingPlayer = 'black';
+            persistedStarter = 'black';
+            startGame('bot');
+        };
+    }
+
+    function showModal() {
+        modal.style.display = 'flex';
+    }
+
+    function hideModal() {
+        modal.style.display = 'none';
     }
 
     initBoard();
