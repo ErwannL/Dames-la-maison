@@ -237,7 +237,7 @@
         <div class="header-bottom">
             <div class="controls">
                 <button class="btn-pvp" id="btn-play-together">Jouer à deux</button>
-                <button class="btn-bot" id="btn-play-solo">Jouer en solo</button>
+                <button class="btn-bot" id="btn-play-solo">Jouer contre le robot Erwann</button>
                 <button class="btn-reset" id="btn-reset" onclick="resetGame()">Réinitialiser</button>
             </div>
         </div>
@@ -261,8 +261,7 @@
 <div id="settingsModal" class="modal" style="display:none;">
     <div class="modal-content settings-content">
         <div class="settings-header">
-                <button id="settings-cancel" class="settings-x" aria-label="Annuler">✕</button>
-                <h2>Paramètres</h2>
+                <h2 class="settings-title">Paramètres</h2>
             </div>
         <div class="settings-body">
             <div class="settings-row">
@@ -348,16 +347,15 @@
     .btn-modal { border-radius:8px;padding:8px 12px;border:none;cursor:pointer }
     .btn-modal[style] { box-shadow:none }
     .btn-modal:hover { opacity:0.95 }
-    /* Close cross (top-right) should be transparent bg with orange glyph */
-    #settings-cancel { background: transparent; border: none; color: #FF7A00; }
+    /* Close cross removed - styling for removed element cleared */
     /* Cancel action button remains orange with white text */
     #settings-cancel-2 { background:#FF7A00;border:none;color:white }
     #settings-save { background:#7c4dff;color:white }
 
     /* removed accent bar */
     .settings-x { position:absolute; right:14px; top:8px; background:transparent;border:none;font-size:18px;color:#FF7A00; width:30px; height:30px; display:flex;align-items:center;justify-content:center; z-index:5 }
-    .settings-header { position:relative; display:flex;align-items:center;justify-content:flex-start;margin-bottom:8px }
-    .settings-header h2 { color:#000;margin:0;padding-left:6px }
+    .settings-header { position:relative; display:flex;align-items:center;justify-content:center;margin-bottom:8px }
+    .settings-header h2, .settings-header .settings-title { color:#000;margin:0;padding:0;text-align:center }
 
     .modal-buttons {
         display: flex;
@@ -1474,7 +1472,6 @@
     // Wire settings modal UI
     const btnSettings = document.getElementById('btn-settings');
     const settingsModal = document.getElementById('settingsModal');
-    const settingsClose = document.getElementById('settings-close');
     const settingsBackward = document.getElementById('settings-backward');
     const settingsSouffler = document.getElementById('settings-souffler');
     const settingsBotLevel = document.getElementById('settings-bot-level');
@@ -1512,7 +1509,7 @@
     }
 
     // Cancel buttons simply close without applying
-    if (settingsCancel) settingsCancel.addEventListener('click', closeSettingsModal);
+    // settings-cancel removed (close is handled by Cancel button and clicking outside modal)
     if (settingsCancel2) settingsCancel2.addEventListener('click', closeSettingsModal);
 
     // Close settings modal on outside click
