@@ -394,9 +394,17 @@
 
     #choosePapy { background: #4CAF50; color: white; }
     #chooseMamie { background: #2196F3; color: white; }
-</style>
+    /* last-move highlight styles */
+    </style>
 
-<script>
+    <style>
+        .square.last-from { box-shadow: inset 0 0 0 3px rgba(255,215,0,0.22); }
+        .square.last-to { box-shadow: inset 0 0 0 4px rgba(255,215,0,0.38); }
+        @keyframes lastMovePulse { 0%{transform:scale(1)}50%{transform:scale(1.02)}100%{transform:scale(1)} }
+        .square.last-to .piece { animation: lastMovePulse 700ms ease; }
+    </style>
+
+    <script>
     const ROWS = 8;
     const COLS = 8;
     let board = [];
@@ -462,6 +470,7 @@
     let persistedHumanColor = 'red'; // 'red' or 'black' - default red
     let persistedStarter = undefined; // 'red' or 'black' - who started last (persist across resets)
     let timeouts = [];
+    let lastMove = null; // { fromRow, fromCol, toRow, toCol } - used to highlight the last moved piece
 
     function initBoard() {
         board = Array(ROWS).fill(null).map(() => Array(COLS).fill(null));
@@ -491,6 +500,11 @@
             for (let col = 0; col < COLS; col++) {
                 const square = document.createElement('div');
                 square.className = 'square ' + ((row + col) % 2 === 0 ? 'light' : 'dark');
+                // highlight last moved squares (from / to)
+                if (lastMove) {
+                    if (lastMove.fromRow === row && lastMove.fromCol === col) square.classList.add('last-from');
+                    if (lastMove.toRow === row && lastMove.toCol === col) square.classList.add('last-to');
+                }
                 square.dataset.row = row;
                 square.dataset.col = col;
 
@@ -621,21 +635,36 @@
                 }
             }
         } else {
-            // For normal pieces, allow forward moves by default. If CONFIG.allowBackwardMoves is true,
-            // allow the opposite directions as well.
-            let directions = piece.color === 'red' ? [[-1,-1], [-1,1]] : [[1,-1], [1,1]];
+            // For normal pieces, allow forward simple moves by default. If CONFIG.allowBackwardMoves is true,
+            // allow the opposite simple moves as well. However, captures (eating) are allowed in all
+            // diagonal directions for normal pieces regardless of CONFIG.allowBackwardMoves.
+            let moveDirections = piece.color === 'red' ? [[-1,-1], [-1,1]] : [[1,-1], [1,1]];
             if (CONFIG.allowBackwardMoves) {
-                directions = [[-1,-1], [-1,1], [1,-1], [1,1]];
+                moveDirections = [[-1,-1], [-1,1], [1,-1], [1,1]];
             }
 
-            for (const [dr, dc] of directions) {
+            // captureDirections always allow captures in both forward and backward diagonals
+            const captureDirections = [[-1,-1], [-1,1], [1,-1], [1,1]];
+
+            // simple (non-capture) moves
+            for (const [dr, dc] of moveDirections) {
                 const newRow = row + dr;
                 const newCol = col + dc;
 
                 if (newRow >= 0 && newRow < ROWS && newCol >= 0 && newCol < COLS) {
                     if (!board[newRow][newCol]) {
                         moves.push({ row: newRow, col: newCol, isCapture: false });
-                    } else if (board[newRow][newCol].color !== piece.color) {
+                    }
+                }
+            }
+
+            // captures (always allow both directions)
+            for (const [dr, dc] of captureDirections) {
+                const newRow = row + dr;
+                const newCol = col + dc;
+
+                if (newRow >= 0 && newRow < ROWS && newCol >= 0 && newCol < COLS) {
+                    if (board[newRow][newCol] && board[newRow][newCol].color !== piece.color) {
                         const jumpRow = newRow + dr;
                         const jumpCol = newCol + dc;
                         if (jumpRow >= 0 && jumpRow < ROWS && jumpCol >= 0 && jumpCol < COLS && !board[jumpRow][jumpCol]) {
@@ -705,7 +734,9 @@
                     }
                 }
             } else {
-                for (const [dr, dc] of directions) {
+                // For non-king pieces: allow captures in all diagonal directions regardless of CONFIG.allowBackwardMoves.
+                const captureDirections = [[-1,-1], [-1,1], [1,-1], [1,1]];
+                for (const [dr, dc] of captureDirections) {
                     const enemyRow = row + dr;
                     const enemyCol = col + dc;
 
@@ -788,9 +819,11 @@
             console.log("-> C'est un mouvement NORMAL");
         }
 
-        // Déplacer la pièce
-        board[toRow][toCol] = piece;
-        board[fromRow][fromCol] = null;
+    // Déplacer la pièce
+    board[toRow][toCol] = piece;
+    board[fromRow][fromCol] = null;
+    // record last move for UI highlighting
+    lastMove = { fromRow, fromCol, toRow, toCol };
 
         if (wasCapture && capturedSquare) {
             const cr = capturedSquare.row;
@@ -1423,6 +1456,7 @@
         continuousCapture = false;
         piecesThatCouldCapture = [];
         currentPlayer = 'red';
+    lastMove = null;
         renderBoard();
         updateStatus('Sélectionnez un mode de jeu');
         hideModal();
@@ -1508,6 +1542,7 @@
         continuousCapture = false;
         piecesThatCouldCapture = [];
         currentPlayer = 'red';
+    lastMove = null;
         renderBoard();
         updateStatus('Sélectionnez un mode de jeu');
     }
