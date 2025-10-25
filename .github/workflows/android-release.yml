@@ -29,7 +29,7 @@ jobs:
 
     - name: Generate signing key
       run: |
-        cd v2/app
+        cd app
         keytool -genkey -v \
           -keystore release-keystore.jks \
           -alias release-alias \
@@ -42,7 +42,6 @@ jobs:
 
     - name: Build Signed Release APK
       run: |
-        cd v2
         chmod +x ./gradlew
         SIGNING_STORE_PASSWORD=password \
         SIGNING_KEY_PASSWORD=password \
@@ -58,14 +57,14 @@ jobs:
 
     - name: Rename APK
       run: |
-        cd v2/app/build/outputs/apk/release
-        cp app-release.apk DamesLaMaison-v${{ github.ref_name }}.apk
+        cd app/build/outputs/apk/release
+        cp app-release.apk DamesLaMaison-${{ github.ref_name }}.apk
 
     - name: Upload APK to Release
       uses: ncipollo/release-action@v1
       with:
         tag: ${{ github.ref_name }}
-        artifacts: "v2/app/build/outputs/apk/release/DamesLaMaison-v${{ github.ref_name }}.apk"
+        artifacts: "app/build/outputs/apk/release/DamesLaMaison-${{ github.ref_name }}.apk"
         token: ${{ secrets.GITHUB_TOKEN }}
         draft: false
         prerelease: false

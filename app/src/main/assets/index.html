@@ -288,7 +288,9 @@
             </div>
                 <!-- Bot think time (only shown when Hard difficulty is selected) -->
                 <div class="settings-row" id="settings-bot-think-row" style="display:none;">
-                    <div class="settings-label">Temps de réflexion du Robot (Hard)</div>
+                    <div style="display:flex;flex-direction:column;gap:8px;max-width:78%;">
+                        <div class="settings-label">Temps de réflexion du Robot (Hard)</div>
+                    </div>
                     <select id="settings-bot-think" class="settings-select">
                         <option value="1000">1 seconde</option>
                         <option value="2000">2 secondes</option>
@@ -301,6 +303,7 @@
                         <option value="max">Max (limite sécurité)</option>
                     </select>
                 </div>
+                <div id="settings-bot-warning" class="settings-warning" style="display:none;">⚠️ Temps de réflexion &gt; 10 s — cela peut rendre l'interface moins réactive.</div>
         </div>
         <div class="settings-actions">
             <button id="settings-save" class="btn-modal">Enregistrer</button>
@@ -352,6 +355,7 @@
     .settings-row { display:flex;justify-content:space-between;align-items:center; }
     .settings-label { font-size:15px;color:#0f1724; max-width:78%; }
     .settings-select { padding:8px 10px;border-radius:8px;border:1px solid #e6e9ee; background:#fff }
+    .settings-warning { color: #92400e; background: #fff7ed; border: 1px solid #ffedd5; padding: 8px 10px; border-radius: 6px; font-size:13px; margin-top:8px }
     .settings-actions { display:flex;justify-content:flex-end;gap:10px;margin-top:16px }
 
     /* Gear button placed inline in header */
@@ -398,8 +402,24 @@
     </style>
 
     <style>
-        .square.last-from { box-shadow: inset 0 0 0 3px rgba(255,215,0,0.22); }
-        .square.last-to { box-shadow: inset 0 0 0 4px rgba(255,215,0,0.38); }
+          /* Color-specific last-move highlights to match player color
+              - "from" = pastel (lighter)
+              - "to"   = darker (stronger)
+          */
+          /* Red player: pastel pink for previous, deeper red for destination */
+          .square.last-from-red { background: linear-gradient(0deg, rgba(255, 235, 238, 0.85), rgba(255, 235, 238, 0.85)) !important; box-shadow: inset 0 0 0 2px rgba(255, 179, 186, 0.45) !important; }
+          .square.last-to-red { background: linear-gradient(0deg, rgba(255, 115, 115, 0.18), rgba(255, 80, 80, 0.18)) !important; box-shadow: inset 0 0 0 4px rgba(200,30,30,0.72) !important; }
+          .square.last-to-red .piece { transform: scale(1.04); }
+
+          /* Black player: pastel gray for previous, stronger dark outline for destination */
+          .square.last-from-black { background: linear-gradient(0deg, rgba(245,245,245,0.85), rgba(245,245,245,0.85)) !important; box-shadow: inset 0 0 0 2px rgba(200,200,200,0.45) !important; }
+          .square.last-to-black { background: linear-gradient(0deg, rgba(80,80,80,0.12), rgba(80,80,80,0.12)) !important; box-shadow: inset 0 0 0 4px rgba(40,40,40,0.85) !important; }
+          .square.last-to-black .piece { transform: scale(1.04); filter: drop-shadow(0 0 6px rgba(0,0,0,0.35)); }
+
+          /* Fallback subtle highlight if color is not set */
+          .square.last-from { box-shadow: inset 0 0 0 3px rgba(255,215,0,0.16); }
+          .square.last-to { box-shadow: inset 0 0 0 4px rgba(255,215,0,0.24); }
+
         @keyframes lastMovePulse { 0%{transform:scale(1)}50%{transform:scale(1.02)}100%{transform:scale(1)} }
         .square.last-to .piece { animation: lastMovePulse 700ms ease; }
     </style>
@@ -524,10 +544,16 @@
             for (let col = 0; col < COLS; col++) {
                 const square = document.createElement('div');
                 square.className = 'square ' + ((row + col) % 2 === 0 ? 'light' : 'dark');
-                // highlight last moved squares (from / to)
+                // highlight last moved squares (from / to) and attach a color-specific class
                 if (lastMove) {
-                    if (lastMove.fromRow === row && lastMove.fromCol === col) square.classList.add('last-from');
-                    if (lastMove.toRow === row && lastMove.toCol === col) square.classList.add('last-to');
+                    if (lastMove.fromRow === row && lastMove.fromCol === col) {
+                        square.classList.add('last-from');
+                        if (lastMove.color) square.classList.add('last-from-' + lastMove.color);
+                    }
+                    if (lastMove.toRow === row && lastMove.toCol === col) {
+                        square.classList.add('last-to');
+                        if (lastMove.color) square.classList.add('last-to-' + lastMove.color);
+                    }
                 }
                 square.dataset.row = row;
                 square.dataset.col = col;
@@ -846,8 +872,8 @@
     // Déplacer la pièce
     board[toRow][toCol] = piece;
     board[fromRow][fromCol] = null;
-    // record last move for UI highlighting
-    lastMove = { fromRow, fromCol, toRow, toCol };
+    // record last move for UI highlighting (include piece color so CSS can use matching highlight)
+    lastMove = { fromRow, fromCol, toRow, toCol, color: piece.color };
 
         if (wasCapture && capturedSquare) {
             const cr = capturedSquare.row;
@@ -1458,7 +1484,9 @@
         startGame.startingPlayer = undefined;
         gameMode = null;
     // Restore persisted config (do not force defaults here so user's preferences survive)
-    loadSettingsFromStorage();
+    // Note: do not access localStorage automatically during install/start to avoid runtime
+    // prompts in some WebView environments. Settings are loaded lazily when the user
+    // opens the Settings dialog.
     const tb = document.getElementById('settings-backward');
     const ts = document.getElementById('settings-souffler');
     const tpq = document.getElementById('settings-prioritize-queen');
@@ -1680,9 +1708,7 @@
         modal.style.display = 'none';
     }
 
-    // Load persisted settings (if any) before initializing UI so CONFIG is respected
-    loadSettingsFromStorage();
-
+    // Do not load persisted settings on startup to avoid possible install-time prompts.
     initBoard();
     renderBoard();
 
@@ -1700,6 +1726,8 @@
 
     if (btnSettings) {
         btnSettings.addEventListener('click', () => {
+            // Load persisted settings right when the user opens the modal (lazy load)
+            try { loadSettingsFromStorage(); } catch(e) { console.warn('Could not lazy-load settings', e); }
             if (settingsModal) settingsModal.style.display = 'flex';
             // set UI from CONFIG
             if (settingsBackward) settingsBackward.checked = CONFIG.allowBackwardMoves;
@@ -1711,6 +1739,7 @@
             if (thinkRow) thinkRow.style.display = (settingsBotLevel && settingsBotLevel.value === 'hard') ? 'flex' : 'none';
             if (settingsBotThink) {
                 settingsBotThink.value = CONFIG.botThinkTime || '20000';
+                try { updateBotThinkWarning(); } catch (e) { /* ignore if not defined */ }
             }
         });
     }
@@ -1721,7 +1750,34 @@
             const thinkRow = document.getElementById('settings-bot-think-row');
             if (!thinkRow) return;
             thinkRow.style.display = (settingsBotLevel.value === 'hard') ? 'flex' : 'none';
+            // update warning visibility when toggling the row
+            try { updateBotThinkWarning(); } catch (e) { /* ignore if not initialized */ }
         });
+    }
+
+    // Show a warning when bot think time is long (>10s) or set to 'max'
+    function updateBotThinkWarning() {
+        const warnEl = document.getElementById('settings-bot-warning');
+        const thinkSel = document.getElementById('settings-bot-think');
+        const thinkRow = document.getElementById('settings-bot-think-row');
+        if (!warnEl || !thinkSel || !thinkRow) return;
+        // only show when the row is visible
+        if (thinkRow.style.display === 'none' || thinkRow.style.display === '') {
+            warnEl.style.display = 'none';
+            return;
+        }
+        const v = thinkSel.value;
+        let show = false;
+        if (v === 'max') show = true;
+        else {
+            const parsed = parseInt(v, 10);
+            if (!isNaN(parsed) && parsed > 10000) show = true;
+        }
+        warnEl.style.display = show ? 'block' : 'none';
+    }
+
+    if (settingsBotThink) {
+        settingsBotThink.addEventListener('change', updateBotThinkWarning);
     }
 
     function closeSettingsModal() {
