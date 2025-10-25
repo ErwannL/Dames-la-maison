@@ -424,6 +424,30 @@
         ,botThinkTime: '20000' // default think time for hard bot (ms as string). Options: '1000','2000','3000','5000','10000','15000','20000','30000','max'
     };
 
+    // --- Persistence helpers (uses DOM storage / localStorage inside WebView) ---
+    function saveSettingsToStorage() {
+        try {
+            localStorage.setItem('dames_settings', JSON.stringify(CONFIG));
+            console.log('Saved settings to localStorage');
+        } catch (e) {
+            console.warn('Failed to save settings', e);
+        }
+    }
+
+    function loadSettingsFromStorage() {
+        try {
+            const s = localStorage.getItem('dames_settings');
+            if (s) {
+                const parsed = JSON.parse(s);
+                // Merge saved values into CONFIG (only keys present will be replaced)
+                Object.assign(CONFIG, parsed);
+                console.log('Loaded settings from localStorage', parsed);
+            }
+        } catch (e) {
+            console.warn('Failed to load settings', e);
+        }
+    }
+
     // --- Zobrist hashing for transposition cache (faster and smaller keys than JSON stringify)
     const ZOBRIST = {
         table: null,
@@ -1433,18 +1457,16 @@
         persistedStarter = undefined;
         startGame.startingPlayer = undefined;
         gameMode = null;
-    // reset config and UI toggles
-    CONFIG.allowBackwardMoves = false;
-    CONFIG.enableSoufflerRule = true;
-    CONFIG.prioritizeQueenCapture = false;
+    // Restore persisted config (do not force defaults here so user's preferences survive)
+    loadSettingsFromStorage();
     const tb = document.getElementById('settings-backward');
     const ts = document.getElementById('settings-souffler');
     const tpq = document.getElementById('settings-prioritize-queen');
     const tThink = document.getElementById('settings-bot-think');
     const tThinkRow = document.getElementById('settings-bot-think-row');
-    if (tb) tb.checked = CONFIG.allowBackwardMoves;
-    if (ts) ts.checked = CONFIG.enableSoufflerRule;
-    if (tpq) tpq.checked = CONFIG.prioritizeQueenCapture;
+    if (tb) tb.checked = !!CONFIG.allowBackwardMoves;
+    if (ts) ts.checked = !!CONFIG.enableSoufflerRule;
+    if (tpq) tpq.checked = !!CONFIG.prioritizeQueenCapture;
     if (tThink) tThink.value = CONFIG.botThinkTime || '20000';
     if (tThinkRow) tThinkRow.style.display = (CONFIG.botLevel === 'hard') ? 'flex' : 'none';
 
@@ -1658,6 +1680,9 @@
         modal.style.display = 'none';
     }
 
+    // Load persisted settings (if any) before initializing UI so CONFIG is respected
+    loadSettingsFromStorage();
+
     initBoard();
     renderBoard();
 
@@ -1714,6 +1739,8 @@
             const settingsThinkSel = document.getElementById('settings-bot-think');
             if (settingsThinkSel) CONFIG.botThinkTime = settingsThinkSel.value;
             console.log('CONFIG updated', CONFIG);
+            // Persist the user's preferences so they survive app restart
+            saveSettingsToStorage();
             // Recompute visuals / state
             selectedPiece = null;
             validMoves = [];
