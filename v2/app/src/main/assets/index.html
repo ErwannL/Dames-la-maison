@@ -203,7 +203,7 @@
         }
 
         .piece.blown-away {
-            animation: blowAway 0.8s ease-out forwards;
+            animation: blowAway 1s ease-out forwards;
         }
 
         @media (max-width: 600px) {
@@ -273,15 +273,34 @@
                 <input type="checkbox" id="settings-souffler" checked />
             </div>
             <div class="settings-row">
+                <label class="settings-label">Prioriser capture par la dame</label>
+                <input type="checkbox" id="settings-prioritize-queen" />
+            </div>
+            <div class="settings-row">
                 <label class="settings-label">Niveau du Robot</label>
                 <div>
                     <select id="settings-bot-level" class="settings-select">
-                        <option value="easy">easy (aléatoire)</option>
+                        <option value="easy">facile (aléatoire)</option>
                         <option value="medium" selected>normal (stratégique)</option>
                         <option value="hard">difficile (implacable)</option>
                     </select>
                 </div>
             </div>
+                <!-- Bot think time (only shown when Hard difficulty is selected) -->
+                <div class="settings-row" id="settings-bot-think-row" style="display:none;">
+                    <div class="settings-label">Temps de réflexion du Robot (Hard)</div>
+                    <select id="settings-bot-think" class="settings-select">
+                        <option value="1000">1 seconde</option>
+                        <option value="2000">2 secondes</option>
+                        <option value="3000">3 secondes</option>
+                        <option value="5000">5 secondes</option>
+                        <option value="10000">10 secondes</option>
+                        <option value="15000">15 secondes</option>
+                        <option value="20000">20 secondes</option>
+                        <option value="30000">30 secondes</option>
+                        <option value="max">Max (limite sécurité)</option>
+                    </select>
+                </div>
         </div>
         <div class="settings-actions">
             <button id="settings-save" class="btn-modal">Enregistrer</button>
@@ -393,6 +412,8 @@
         allowBackwardMoves: false,
         enableSoufflerRule: true
         ,botLevel: 'medium' // 'easy' | 'medium' | 'hard'
+        ,prioritizeQueenCapture: false // when true, prefer captures done by queens; penalize pawn capture when queen could
+        ,botThinkTime: '20000' // default think time for hard bot (ms as string). Options: '1000','2000','3000','5000','10000','15000','20000','30000','max'
     };
 
     // --- Zobrist hashing for transposition cache (faster and smaller keys than JSON stringify)
@@ -433,6 +454,10 @@
         }
     };
     ZOBRIST.init();
+    
+        // Security cap for the 'max' option (ms). When user selects 'max' the engine may think up
+        // to this many milliseconds to avoid locking the browser indefinitely.
+        const MAX_BOT_THINK_MS = 120000; // 2 minutes
     // Persisted choice: who is the human when playing vs bot or who starts when playing together
     let persistedHumanColor = 'red'; // 'red' or 'black' - default red
     let persistedStarter = undefined; // 'red' or 'black' - who started last (persist across resets)
@@ -721,6 +746,10 @@
         const dr = Math.sign(toRow - fromRow);
         const dc = Math.sign(toCol - fromCol);
         let capturedSquare = null;
+        // If prioritizeQueenCapture is enabled, detect if a queen of the mover could capture
+        // the same target. We record it here before the board is modified so we can apply
+        // a penalty later if the player chooses a pawn capture instead of a queen.
+        let queenCandidate = null;
         if (Math.abs(toRow - fromRow) >= 2 || Math.abs(toCol - fromCol) >= 2) {
             // scan along the path for an enemy piece
             for (let step = 1; step < Math.max(Math.abs(toRow - fromRow), Math.abs(toCol - fromCol)); step++) {
@@ -732,6 +761,22 @@
                         capturedSquare = { row: r, col: c };
                         wasCapture = true;
                         console.log(`-> C'est une CAPTURE de la pièce en (${r}, ${c})`);
+                        // locate a queen of the mover's color that could capture that same piece
+                        if (CONFIG.prioritizeQueenCapture) {
+                            for (let qr = 0; qr < ROWS; qr++) {
+                                for (let qc = 0; qc < COLS; qc++) {
+                                    const p = board[qr][qc];
+                                    if (p && p.color === piece.color && p.isKing) {
+                                        const kmoves = getValidMoves(qr, qc);
+                                        if (kmoves.some(m => m.isCapture && m.capturedRow === r && m.capturedCol === c)) {
+                                            queenCandidate = { row: qr, col: qc };
+                                            qr = ROWS; // break outer
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         break;
                     } else {
                         // blocked by own piece
@@ -753,6 +798,25 @@
             console.log(`-> Capture confirmée de la pièce en (${cr}, ${cc})`);
             blowAwayPiece(cr, cc);
             board[cr][cc] = null;
+            // If priority rule is enabled and the mover was a pawn while a queen could have
+            // captured the same piece, apply the penalty: downgrade that queen to a pawn
+            // and show an alert to the player.
+            if (CONFIG.prioritizeQueenCapture && queenCandidate && !piece.isKing) {
+                // show penalty popup now, but apply the downgrade after popup fade + 1s delay
+                showQueenPenaltyMessage();
+                // capture the queen position now (in case board changes elsewhere)
+                const qPos = { row: queenCandidate.row, col: queenCandidate.col };
+                const tPenalty = setTimeout(() => {
+                    const q = board[qPos.row] && board[qPos.row][qPos.col];
+                    if (q && q.isKing) {
+                        q.isKing = false;
+                        console.log(`-> Pénalité appliquée : la dame en (${qPos.row}, ${qPos.col}) est rétrogradée en pion.`);
+                        // reflect change now
+                        renderBoard();
+                    }
+                }, 6000); // 4s visible +1s fade +1s delay before showing penalty
+                timeouts.push(tPenalty);
+            }
         }
 
         // Promotion en dame
@@ -860,6 +924,16 @@
                 }
             }
         }
+        // If prioritization is enabled, prefer queens first in the list
+        if (CONFIG.prioritizeQueenCapture) {
+            piecesThatCouldCapture.sort((a,b) => {
+                const pa = board[a.row] && board[a.row][a.col];
+                const pb = board[b.row] && board[b.row][b.col];
+                const aIsKing = pa && pa.isKing;
+                const bIsKing = pb && pb.isKing;
+                return (bIsKing ? 1 : 0) - (aIsKing ? 1 : 0);
+            });
+        }
         return mustCapture;
     }
 
@@ -867,7 +941,8 @@
         // Show message first, then animate the piece away after message removed
         showBlownMessage();
 
-        // After the message disappears (4s), animate piece and then remove it
+        // After the message disappears (4s + 1s fade) wait 1s then animate piece and remove it
+        // timeline: 4s visible +1s fade = 5s removal, +1s = 6s before animation
         const t1 = setTimeout(() => {
             const boardEl = document.getElementById('board');
             const squares = boardEl.children;
@@ -877,7 +952,7 @@
             if (pieceEl) {
                 // Add animation class
                 pieceEl.classList.add('blown-away');
-                // After animation ends (~0.8s), remove the piece from board model and DOM
+                // After animation ends (1s), remove the piece from board model and DOM
                 const t2 = setTimeout(() => {
                     board[fromRow][fromCol] = null;
                     // update turn and state
@@ -895,7 +970,7 @@
                             timeouts.push(t3);
                         }
                     }
-                }, 900);
+                }, 1000);
                 timeouts.push(t2);
             } else {
                 // If there's no piece element in DOM, still remove from model and advance turn
@@ -915,7 +990,7 @@
                     }
                 }
             }
-        }, 4100);
+        }, 6000);
         timeouts.push(t1);
     }
 
@@ -923,12 +998,40 @@
         const message = document.createElement('div');
         message.className = 'blown-message';
         message.innerHTML = "🌬️<br>Souffler n'est pas jouer !<br>Vous perdez votre pion !";
+        // ensure starting fully visible
+        message.style.opacity = '1';
         document.body.appendChild(message);
-        const t = setTimeout(() => {
-            message.remove();
+        // After 4s keep visible, then fade out over 1s
+        const fadeStart = setTimeout(() => {
+            message.style.transition = 'opacity 1s, transform 1s';
+            message.style.opacity = '0';
+            message.style.transform = 'scale(0.95)';
         }, 4000);
-        timeouts.push(t);
-        return t;
+        const removeTimeout = setTimeout(() => {
+            message.remove();
+        }, 5000);
+        timeouts.push(fadeStart, removeTimeout);
+        return removeTimeout;
+    }
+
+    function showQueenPenaltyMessage() {
+        const message = document.createElement('div');
+        message.className = 'blown-message';
+        message.style.background = 'rgba(255,165,0,0.95)';
+        message.innerHTML = "⚠️<br>Priorité aux dames !<br>Une dame a été rétrogradée en pion.";
+        message.style.opacity = '1';
+        document.body.appendChild(message);
+        // Fade after 4s, remove at 5s
+        const fadeStart = setTimeout(() => {
+            message.style.transition = 'opacity 1s, transform 1s';
+            message.style.opacity = '0';
+            message.style.transform = 'scale(0.95)';
+        }, 4000);
+        const removeTimeout = setTimeout(() => {
+            message.remove();
+        }, 5000);
+        timeouts.push(fadeStart, removeTimeout);
+        return removeTimeout;
     }
 
     function getAllValidMoves(color) {
@@ -957,7 +1060,18 @@
         }
 
         if (hasCaptures) {
-            return allMoves.filter(m => m.isCapture);
+                let caps = allMoves.filter(m => m.isCapture);
+                // If prioritization enabled, prefer captures performed by queens (isKing) first.
+                if (CONFIG.prioritizeQueenCapture) {
+                    caps.sort((a,b) => {
+                        const aPiece = board[a.fromRow] && board[a.fromRow][a.fromCol];
+                        const bPiece = board[b.fromRow] && board[b.fromRow][b.fromCol];
+                        const aIsKing = aPiece && aPiece.isKing;
+                        const bIsKing = bPiece && bPiece.isKing;
+                        return (bIsKing ? 1 : 0) - (aIsKing ? 1 : 0);
+                    });
+                }
+                return caps;
         }
 
         return allMoves;
@@ -974,9 +1088,23 @@
         } else if (CONFIG.botLevel === 'medium') {
             move = getBestMove(botColor, 4);
         } else if (CONFIG.botLevel === 'hard') {
-            // use iterative deepening with time limit for hard level
-            // increase time budget and depth for much stronger play
-            move = getBestMoveTimed(botColor, 12, 5000); // 5s max
+            // use a much stronger search for hard level: deeper iterative deepening and larger time budget
+            // WARNING: large time budgets may make the browser tab unresponsive during thinking.
+            // We use iterative deepening with quiescence + transposition table already implemented in getBestMoveTimed.
+            // Increase depth and time to make the bot extremely hard to beat.
+            // Compute time limit from CONFIG.botThinkTime; allow 'max' option which maps to MAX_BOT_THINK_MS
+            let timeLimitMs = 20000;
+            try {
+                if (CONFIG.botThinkTime === 'max') {
+                    timeLimitMs = MAX_BOT_THINK_MS;
+                } else if (typeof CONFIG.botThinkTime === 'string') {
+                    const parsed = parseInt(CONFIG.botThinkTime, 10);
+                    if (!isNaN(parsed) && parsed > 0) timeLimitMs = Math.min(parsed, MAX_BOT_THINK_MS);
+                } else if (typeof CONFIG.botThinkTime === 'number') {
+                    timeLimitMs = Math.min(CONFIG.botThinkTime, MAX_BOT_THINK_MS);
+                }
+            } catch (e) { /* fallback to default */ }
+            move = getBestMoveTimed(botColor, 28, timeLimitMs); // depth 28, time limited by selection
         } else {
             move = getBestMove(botColor, 4);
         }
@@ -993,10 +1121,26 @@
         if (moves.length === 0) return null;
 
         function moveHeuristic(m) {
+            // Improved lightweight heuristic for move ordering in timed search
             let s = 0;
-            if (m.isCapture) s += 100;
-            const to = board[m.toRow] && board[m.toRow][m.toCol];
-            if (to && to.isKing) s += 20;
+            const fromPiece = board[m.fromRow] && board[m.fromRow][m.fromCol];
+            const toPiece = board[m.toRow] && board[m.toRow][m.toCol];
+            if (m.isCapture) {
+                // reward captures strongly; prefer capturing kings
+                const captured = (m.capturedRow !== undefined) ? (board[m.capturedRow] && board[m.capturedRow][m.capturedCol]) : null;
+                if (captured) s += (captured.isKing ? 300 : 120);
+                else s += 120;
+            }
+            if (fromPiece && fromPiece.isKing) s += 60; // kings are powerful movers
+            // promotion opportunity (landing on last rank)
+            if (fromPiece && !fromPiece.isKing) {
+                if ((fromPiece.color === 'red' && m.toRow === 0) || (fromPiece.color === 'black' && m.toRow === 7)) {
+                    s += 200;
+                }
+            }
+            // small centralization bonus
+            const centerDist = Math.abs(3.5 - m.toCol) + Math.abs(3.5 - m.toRow);
+            s += Math.max(0, 20 - centerDist * 3);
             return s;
         }
         moves.sort((a,b) => moveHeuristic(b) - moveHeuristic(a));
@@ -1200,8 +1344,9 @@
             for (let col = 0; col < COLS; col++) {
                 const piece = board[row][col];
                 if (piece) {
-                    const value = piece.isKing ? 30 : 10;
-                    const positionBonus = piece.color === 'black' ? row : (7 - row);
+                    // stronger piece values for harder engine
+                    const value = piece.isKing ? 320 : 100;
+                    const positionBonus = piece.color === 'black' ? row * 4 : (7 - row) * 4;
                     if (piece.color === color) {
                         score += value + positionBonus;
                     } else {
@@ -1213,7 +1358,7 @@
         // mobility bonus: number of moves for 'color' minus opponent
         const myMoves = getAllValidMoves(color).length;
         const oppMoves = getAllValidMoves(color === 'red' ? 'black' : 'red').length;
-        score += (myMoves - oppMoves) * 2;
+        score += (myMoves - oppMoves) * 8;
         return score;
     }
 
@@ -1258,10 +1403,17 @@
     // reset config and UI toggles
     CONFIG.allowBackwardMoves = false;
     CONFIG.enableSoufflerRule = true;
+    CONFIG.prioritizeQueenCapture = false;
     const tb = document.getElementById('settings-backward');
     const ts = document.getElementById('settings-souffler');
+    const tpq = document.getElementById('settings-prioritize-queen');
+    const tThink = document.getElementById('settings-bot-think');
+    const tThinkRow = document.getElementById('settings-bot-think-row');
     if (tb) tb.checked = CONFIG.allowBackwardMoves;
     if (ts) ts.checked = CONFIG.enableSoufflerRule;
+    if (tpq) tpq.checked = CONFIG.prioritizeQueenCapture;
+    if (tThink) tThink.value = CONFIG.botThinkTime || '20000';
+    if (tThinkRow) tThinkRow.style.display = (CONFIG.botLevel === 'hard') ? 'flex' : 'none';
 
         // Reinitialize board/UI to initial state
         initBoard();
@@ -1330,17 +1482,22 @@
         while (timeouts.length) {
             clearTimeout(timeouts.pop());
         }
-        // Reset persisted choices as user requested full reset
+        // Reset persisted choices as user requested full reset (but keep UI settings)
         persistedHumanColor = 'red';
         persistedHumanLabel = 'Papy';
         gameMode = null;
-    // reset config UI to defaults
-    CONFIG.allowBackwardMoves = false;
-    CONFIG.enableSoufflerRule = true;
+    // NOTE: preserve CONFIG (user settings) on reset: do NOT reset CONFIG flags here so the user's
+    // preferences (like Prioriser capture par la dame) survive a Reset action.
     const tb = document.getElementById('settings-backward');
     const ts = document.getElementById('settings-souffler');
+    const tpq = document.getElementById('settings-prioritize-queen');
+    const tThink = document.getElementById('settings-bot-think');
+    const tThinkRow = document.getElementById('settings-bot-think-row');
     if (tb) tb.checked = CONFIG.allowBackwardMoves;
     if (ts) ts.checked = CONFIG.enableSoufflerRule;
+    if (tpq) tpq.checked = CONFIG.prioritizeQueenCapture;
+    if (tThink) tThink.value = CONFIG.botThinkTime || '20000';
+    if (tThinkRow) tThinkRow.style.display = (CONFIG.botLevel === 'hard') ? 'flex' : 'none';
         // Close modal if open
         hideModal();
         // Reinitialize board/UI but do not auto-start a game; user will choose mode and starter again
@@ -1474,7 +1631,9 @@
     const settingsModal = document.getElementById('settingsModal');
     const settingsBackward = document.getElementById('settings-backward');
     const settingsSouffler = document.getElementById('settings-souffler');
+    const settingsPrioritizeQueen = document.getElementById('settings-prioritize-queen');
     const settingsBotLevel = document.getElementById('settings-bot-level');
+    const settingsBotThink = document.getElementById('settings-bot-think');
     const settingsSave = document.getElementById('settings-save');
     const settingsCancel = document.getElementById('settings-cancel');
     const settingsCancel2 = document.getElementById('settings-cancel-2');
@@ -1485,7 +1644,23 @@
             // set UI from CONFIG
             if (settingsBackward) settingsBackward.checked = CONFIG.allowBackwardMoves;
             if (settingsSouffler) settingsSouffler.checked = CONFIG.enableSoufflerRule;
+            if (settingsPrioritizeQueen) settingsPrioritizeQueen.checked = CONFIG.prioritizeQueenCapture;
             if (settingsBotLevel) settingsBotLevel.value = CONFIG.botLevel || 'medium';
+            // show/hide the think-time row when difficulty is hard
+            const thinkRow = document.getElementById('settings-bot-think-row');
+            if (thinkRow) thinkRow.style.display = (settingsBotLevel && settingsBotLevel.value === 'hard') ? 'flex' : 'none';
+            if (settingsBotThink) {
+                settingsBotThink.value = CONFIG.botThinkTime || '20000';
+            }
+        });
+    }
+
+    // Toggle visibility of the bot-think option when user changes bot difficulty inside the modal
+    if (settingsBotLevel) {
+        settingsBotLevel.addEventListener('change', (e) => {
+            const thinkRow = document.getElementById('settings-bot-think-row');
+            if (!thinkRow) return;
+            thinkRow.style.display = (settingsBotLevel.value === 'hard') ? 'flex' : 'none';
         });
     }
 
@@ -1498,7 +1673,11 @@
         settingsSave.addEventListener('click', () => {
             if (settingsBackward) CONFIG.allowBackwardMoves = settingsBackward.checked;
             if (settingsSouffler) CONFIG.enableSoufflerRule = settingsSouffler.checked;
+            const settingsPrioritizeQueen = document.getElementById('settings-prioritize-queen');
+            if (settingsPrioritizeQueen) CONFIG.prioritizeQueenCapture = settingsPrioritizeQueen.checked;
             if (settingsBotLevel) CONFIG.botLevel = settingsBotLevel.value;
+            const settingsThinkSel = document.getElementById('settings-bot-think');
+            if (settingsThinkSel) CONFIG.botThinkTime = settingsThinkSel.value;
             console.log('CONFIG updated', CONFIG);
             // Recompute visuals / state
             selectedPiece = null;
