@@ -1202,6 +1202,40 @@
         }
     }
 
+    // A fast immediate move used when the countdown reaches 0 so the UI does not stall.
+    // This prefers cached best moves (from persistentBestMoves) and falls back to
+    // a quick search (getBestMove) to keep response immediate.
+    function botMoveImmediate() {
+        const botColor = persistedHumanColor === 'red' ? 'black' : 'red';
+        let move = null;
+
+        if (CONFIG.botLevel === 'easy') {
+            const moves = getAllValidMoves(botColor);
+            if (moves.length === 0) return;
+            move = moves[Math.floor(Math.random() * moves.length)];
+        } else if (CONFIG.botLevel === 'medium') {
+            move = getBestMove(botColor, 4);
+        } else if (CONFIG.botLevel === 'hard') {
+            // try to use the persistent cached best move for immediate response
+            const key = ZOBRIST.computeKey(board);
+            const cached = persistentBestMoves.get(key);
+            if (cached && cached.move) {
+                move = cached.move;
+            } else {
+                // fallback to a faster shallow search to avoid long blocking
+                move = getBestMove(botColor, 4);
+            }
+        } else {
+            move = getBestMove(botColor, 4);
+        }
+
+        if (move) {
+            makeMove(move.fromRow, move.fromCol, move.toRow, move.toCol);
+            renderBoard();
+            try { startBackgroundPrecompute(botColor); } catch (e) { console.warn('Background precompute failed', e); }
+        }
+    }
+
     // Iterative deepening with transposition cache and move ordering
     function getBestMoveTimed(color, maxDepth, timeLimitMs) {
         const moves = getAllValidMoves(color);
@@ -1438,7 +1472,7 @@
             if (statusEl) statusEl.textContent = `Le robot réfléchit... ${s}s`;
             if (rem <= 0) {
                 stopBotCountdown();
-                try { botMove(); } catch (e) { console.warn('botMove error after countdown', e); }
+                try { botMoveImmediate(color); } catch (e) { console.warn('botMoveImmediate error after countdown', e); }
             }
         }
 
