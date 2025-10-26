@@ -20,6 +20,13 @@ fi
 
 TAG="$1"
 
+# If the tag doesn't start with 'v', prepend it so tags are consistent (e.g. "v1.2.3").
+# This accepts only a lowercase 'v' per user's request.
+if [[ "$TAG" != v* ]]; then
+  echo "Tag '$TAG' does not start with 'v' — prepending 'v' to make it 'v$TAG'"
+  TAG="v$TAG"
+fi
+
 # find repository root (must be run from somewhere inside the repo)
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || {
   echo "Error: this script must be run inside a git repository." >&2
