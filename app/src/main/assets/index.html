@@ -1828,6 +1828,27 @@
         while (timeouts.length) {
             clearTimeout(timeouts.pop());
         }
+        // Also cancel any scheduled background precompute
+        try {
+            if (persistentBackgroundTimeout) {
+                if (persistentBackgroundTimeout.type === 'idle' && window.cancelIdleCallback) {
+                    cancelIdleCallback(persistentBackgroundTimeout.id);
+                } else {
+                    clearTimeout(persistentBackgroundTimeout.id);
+                }
+            }
+        } catch (e) {}
+        persistentBackgroundTimeout = null;
+
+        // Remove any visible blown/penalty messages immediately so Reset doesn't leave them stuck
+        try {
+            document.querySelectorAll('.blown-message').forEach(el => {
+                if (el && el.parentNode) el.parentNode.removeChild(el);
+            });
+        } catch (e) {}
+
+        // Ensure settings modal is closed as well
+        try { if (typeof settingsModal !== 'undefined' && settingsModal) settingsModal.style.display = 'none'; } catch (e) {}
         // Reset persisted choices as user requested full reset (but keep UI settings)
         persistedHumanColor = 'red';
         persistedHumanLabel = 'Papy';
@@ -1845,7 +1866,8 @@
     if (tThink) tThink.value = CONFIG.botThinkTime || '20000';
     if (tThinkRow) tThinkRow.style.display = (CONFIG.botLevel === 'hard') ? 'flex' : 'none';
         // Close modal if open
-        hideModal();
+    // choice/start modal
+    try { hideModal(); } catch (e) {}
         // Reinitialize board/UI but do not auto-start a game; user will choose mode and starter again
         initBoard();
         selectedPiece = null;
