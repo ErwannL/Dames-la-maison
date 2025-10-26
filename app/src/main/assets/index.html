@@ -289,7 +289,7 @@
                 <!-- Bot think time (only shown when Hard difficulty is selected) -->
                 <div class="settings-row" id="settings-bot-think-row" style="display:none;">
                     <div style="display:flex;flex-direction:column;gap:8px;max-width:78%;">
-                        <div class="settings-label">Temps de réflexion du Robot (Hard)</div>
+                        <div class="settings-label">Temps de réflexion du Robot</div>
                     </div>
                     <select id="settings-bot-think" class="settings-select">
                         <option value="1000">1 seconde</option>
@@ -300,7 +300,6 @@
                         <option value="15000">15 secondes</option>
                         <option value="20000">20 secondes</option>
                         <option value="30000">30 secondes</option>
-                        <option value="max">Max (limite sécurité)</option>
                     </select>
                 </div>
                 <div id="settings-bot-warning" class="settings-warning" style="display:none;">⚠️ Temps de réflexion &gt; 10 s — cela peut rendre l'interface moins réactive.</div>
@@ -441,7 +440,7 @@
         enableSoufflerRule: true
         ,botLevel: 'medium' // 'easy' | 'medium' | 'hard'
         ,prioritizeQueenCapture: false // when true, prefer captures done by queens; penalize pawn capture when queen could
-        ,botThinkTime: '20000' // default think time for hard bot (ms as string). Options: '1000','2000','3000','5000','10000','15000','20000','30000','max'
+        ,botThinkTime: '5000' // default think time for hard bot (ms as string). Options: '1000','2000','3000','5000','10000','15000','20000','30000'
     };
 
     // --- Persistence helpers (uses DOM storage / localStorage inside WebView) ---
@@ -507,9 +506,21 @@
     };
     ZOBRIST.init();
     
-        // Security cap for the 'max' option (ms). When user selects 'max' the engine may think up
-        // to this many milliseconds to avoid locking the browser indefinitely.
-        const MAX_BOT_THINK_MS = 120000; // 2 minutes
+    // Persistent search caches so the hard bot can reuse work across moves.
+    // persistentTransposition: Map<zobristKey, { depth, score }>
+    // persistentBestMoves: Map<zobristKey, { move, depth }>
+    const persistentTransposition = new Map();
+    const persistentBestMoves = new Map();
+    // Background precompute handle to avoid overlapping background tasks
+    let persistentBackgroundTimeout = null;
+    // Bot countdown state (used to display a countdown while the bot "thinks")
+    let botCountdownInterval = null;
+    let botCountdownTimeout = null;
+    let botCountdownActive = false;
+
+    // Security cap for bot think time (ms). We always clamp to this to avoid locking
+    // the browser indefinitely when very large values are configured.
+    const MAX_BOT_THINK_MS = 120000; // 2 minutes
     // Persisted choice: who is the human when playing vs bot or who starts when playing together
     let persistedHumanColor = 'red'; // 'red' or 'black' - default red
     let persistedStarter = undefined; // 'red' or 'black' - who started last (persist across resets)
@@ -923,8 +934,8 @@
                 if (gameMode === 'bot') {
                     const botColor = persistedHumanColor === 'red' ? 'black' : 'red';
                     if (currentPlayer === botColor) {
-                        const t = setTimeout(botMove, 700);
-                        timeouts.push(t);
+                        // Start visible countdown equal to configured bot think time, then play
+                        startBotCountdown(getConfiguredBotTimeMs(), botColor);
                     }
                 }
                 return; // On reste sur le même tour pour la capture suivante
@@ -969,13 +980,12 @@
         updateStatus();
         checkWinner();
 
-        if (gameMode === 'bot') {
-            const botColor = persistedHumanColor === 'red' ? 'black' : 'red';
-            if (currentPlayer === botColor) {
-                const t = setTimeout(botMove, 500);
-                timeouts.push(t);
+            if (gameMode === 'bot') {
+                const botColor = persistedHumanColor === 'red' ? 'black' : 'red';
+                if (currentPlayer === botColor) {
+                    startBotCountdown(getConfiguredBotTimeMs(), botColor);
+                }
             }
-        }
 
         renderBoard();
     }
@@ -1046,11 +1056,10 @@
                     renderBoard();
                     checkWinner();
 
-                    if (gameMode === 'bot') {
+                        if (gameMode === 'bot') {
                         const botColor = persistedHumanColor === 'red' ? 'black' : 'red';
                         if (currentPlayer === botColor) {
-                            const t3 = setTimeout(botMove, 500);
-                            timeouts.push(t3);
+                            startBotCountdown(getConfiguredBotTimeMs(), botColor);
                         }
                     }
                 }, 1000);
@@ -1068,8 +1077,7 @@
                 if (gameMode === 'bot') {
                     const botColor = persistedHumanColor === 'red' ? 'black' : 'red';
                     if (currentPlayer === botColor) {
-                        const t3 = setTimeout(botMove, 500);
-                        timeouts.push(t3);
+                        startBotCountdown(getConfiguredBotTimeMs(), botColor);
                     }
                 }
             }
@@ -1170,23 +1178,13 @@
             move = moves[Math.floor(Math.random() * moves.length)];
         } else if (CONFIG.botLevel === 'medium') {
             move = getBestMove(botColor, 4);
-        } else if (CONFIG.botLevel === 'hard') {
+    } else if (CONFIG.botLevel === 'hard') {
             // use a much stronger search for hard level: deeper iterative deepening and larger time budget
             // WARNING: large time budgets may make the browser tab unresponsive during thinking.
             // We use iterative deepening with quiescence + transposition table already implemented in getBestMoveTimed.
             // Increase depth and time to make the bot extremely hard to beat.
-            // Compute time limit from CONFIG.botThinkTime; allow 'max' option which maps to MAX_BOT_THINK_MS
-            let timeLimitMs = 20000;
-            try {
-                if (CONFIG.botThinkTime === 'max') {
-                    timeLimitMs = MAX_BOT_THINK_MS;
-                } else if (typeof CONFIG.botThinkTime === 'string') {
-                    const parsed = parseInt(CONFIG.botThinkTime, 10);
-                    if (!isNaN(parsed) && parsed > 0) timeLimitMs = Math.min(parsed, MAX_BOT_THINK_MS);
-                } else if (typeof CONFIG.botThinkTime === 'number') {
-                    timeLimitMs = Math.min(CONFIG.botThinkTime, MAX_BOT_THINK_MS);
-                }
-            } catch (e) { /* fallback to default */ }
+            // Use configured think time (clamped) as the time limit. Default is 5000ms.
+            const timeLimitMs = getConfiguredBotTimeMs();
             move = getBestMoveTimed(botColor, 28, timeLimitMs); // depth 28, time limited by selection
         } else {
             move = getBestMove(botColor, 4);
@@ -1195,6 +1193,12 @@
         if (move) {
             makeMove(move.fromRow, move.fromCol, move.toRow, move.toCol);
             renderBoard();
+            // After the bot plays, kick off a short background precompute to continue
+            // populating the persistent cache so subsequent moves can often be served
+            // from cached results and improved over time.
+            try {
+                startBackgroundPrecompute(botColor);
+            } catch (e) { console.warn('Background precompute failed to start', e); }
         }
     }
 
@@ -1202,6 +1206,18 @@
     function getBestMoveTimed(color, maxDepth, timeLimitMs) {
         const moves = getAllValidMoves(color);
         if (moves.length === 0) return null;
+
+        // Board key for caching
+        const boardKey = ZOBRIST.computeKey(board);
+        // If we already have a cached best move for this exact position, return it immediately
+        // (we still will populate/improve the cache in background when possible).
+        const cached = persistentBestMoves.get(boardKey);
+        if (cached && cached.move) {
+            console.log('getBestMoveTimed: returning cached best move from persistent cache');
+            // schedule some background improvement work (non-blocking schedule)
+            try { startBackgroundPrecompute(color); } catch (e) {}
+            return cached.move;
+        }
 
         function moveHeuristic(m) {
             // Improved lightweight heuristic for move ordering in timed search
@@ -1228,7 +1244,9 @@
         }
         moves.sort((a,b) => moveHeuristic(b) - moveHeuristic(a));
 
-        const transposition = new Map();
+    // Seed the local transposition with the persistent cache (if any) so previously
+    // searched positions are reused across moves.
+    const transposition = new Map(persistentTransposition);
         const startTime = Date.now();
         let bestOverall = moves[0];
         // Quiescence search (capture-only extension)
@@ -1291,6 +1309,17 @@
             if (bestMove) bestOverall = bestMove;
         }
 
+        // Merge local transposition results back into persistentTransposition so future
+        // calls can reuse work. Also store the best move for this board position.
+        try {
+            for (const [k, v] of transposition.entries()) {
+                persistentTransposition.set(k, v);
+            }
+            if (boardKey && bestOverall) {
+                persistentBestMoves.set(boardKey, { move: bestOverall, depth: maxDepth });
+            }
+        } catch (e) { console.warn('Failed to merge transposition into persistent cache', e); }
+
         return bestOverall;
     }
 
@@ -1345,6 +1374,88 @@
         }
 
         return bestMove;
+    }
+
+    // Background precompute helper: try to improve the persistent cache for `color`.
+    // This will run getBestMoveTimed with a modest depth and time budget in a scheduled
+    // timeout so we don't block the immediate UI work of making the move.
+    function startBackgroundPrecompute(color) {
+        // cancel any existing scheduled precompute so we don't pile up work
+        if (persistentBackgroundTimeout) {
+            clearTimeout(persistentBackgroundTimeout);
+            persistentBackgroundTimeout = null;
+        }
+
+        // Only meaningful for hard level
+        if (CONFIG.botLevel !== 'hard') return;
+
+        // schedule after a short idle delay (100ms) so the UI can finish rendering
+        persistentBackgroundTimeout = setTimeout(() => {
+            try {
+                const timeLimit = (() => {
+                    const p = parseInt(CONFIG.botThinkTime, 10);
+                    return (!isNaN(p) && p > 0) ? Math.min(p, MAX_BOT_THINK_MS) : 5000;
+                })();
+
+                // Use a moderate depth for background improvement; keep it bounded to avoid freezing
+                const backgroundDepth = 10;
+                console.log('Starting background precompute for', color, 'timeLimit=', timeLimit, 'depth=', backgroundDepth);
+                // run a timed search to populate/extend the persistent cache
+                const best = getBestMoveTimed(color, backgroundDepth, timeLimit);
+                console.log('Background precompute finished, best was', best);
+            } catch (e) {
+                console.warn('Background precompute failed', e);
+            }
+            persistentBackgroundTimeout = null;
+        }, 100);
+    }
+
+    // Return configured bot think time in milliseconds (clamped).
+    function getConfiguredBotTimeMs() {
+        try {
+            if (typeof CONFIG.botThinkTime === 'string') {
+                const p = parseInt(CONFIG.botThinkTime, 10);
+                if (!isNaN(p) && p > 0) return Math.min(p, MAX_BOT_THINK_MS);
+            } else if (typeof CONFIG.botThinkTime === 'number') {
+                return Math.min(CONFIG.botThinkTime, MAX_BOT_THINK_MS);
+            }
+        } catch (e) {}
+        return 5000; // default 5s
+    }
+
+    // Start a visible countdown for the bot and call botMove() when it reaches 0.
+    function startBotCountdown(ms, color) {
+        // clear any existing countdowns
+        stopBotCountdown();
+        botCountdownActive = true;
+        const statusEl = document.getElementById('status');
+        const start = Date.now();
+        const end = start + ms;
+
+        function tick() {
+            const rem = Math.max(0, end - Date.now());
+            const s = (rem / 1000).toFixed(1);
+            if (statusEl) statusEl.textContent = `Le robot réfléchit... ${s}s`;
+            if (rem <= 0) {
+                stopBotCountdown();
+                try { botMove(); } catch (e) { console.warn('botMove error after countdown', e); }
+            }
+        }
+
+        // First immediate tick
+        tick();
+        botCountdownInterval = setInterval(tick, 100);
+        botCountdownTimeout = setTimeout(() => {
+            // safety: ensure final tick and botMove in case interval missed it
+            tick();
+        }, ms + 100);
+        timeouts.push(botCountdownTimeout);
+    }
+
+    function stopBotCountdown() {
+        botCountdownActive = false;
+        if (botCountdownInterval) { clearInterval(botCountdownInterval); botCountdownInterval = null; }
+        if (botCountdownTimeout) { clearTimeout(botCountdownTimeout); botCountdownTimeout = null; }
     }
 
     // minimax with optional transposition cache and time budget
@@ -1473,6 +1584,8 @@
 
     function initializeAppState() {
         // Cancel any pending timeouts
+        // also stop any active bot countdown so intervals are cleared cleanly
+        stopBotCountdown();
         while (timeouts.length) {
             clearTimeout(timeouts.pop());
         }
@@ -1513,6 +1626,8 @@
     }
 
     function updateStatus(message) {
+        // don't overwrite the visible bot countdown while it's active
+        if (botCountdownActive) return;
         const status = document.getElementById('status');
         if (message) {
             status.textContent = message;
@@ -1546,13 +1661,12 @@
         renderBoard();
         updateStatus();
         // If playing against the bot and the bot starts, let it play immediately
-        if (gameMode === 'bot') {
-            const botColor = persistedHumanColor === 'red' ? 'black' : 'red';
-            if (currentPlayer === botColor) {
-                const t = setTimeout(botMove, 500);
-                timeouts.push(t);
+            if (gameMode === 'bot') {
+                const botColor = persistedHumanColor === 'red' ? 'black' : 'red';
+                if (currentPlayer === botColor) {
+                    startBotCountdown(getConfiguredBotTimeMs(), botColor);
+                }
             }
-        }
     }
 
     function resetGame() {
@@ -1563,6 +1677,8 @@
         // Clear persistedStarter so the next game prompts again
         persistedStarter = undefined;
         // Cancel any pending timeouts
+        // also stop any active bot countdown
+        stopBotCountdown();
         while (timeouts.length) {
             clearTimeout(timeouts.pop());
         }
@@ -1755,7 +1871,7 @@
         });
     }
 
-    // Show a warning when bot think time is long (>10s) or set to 'max'
+    // Show a warning when bot think time is long (>10s)
     function updateBotThinkWarning() {
         const warnEl = document.getElementById('settings-bot-warning');
         const thinkSel = document.getElementById('settings-bot-think');
@@ -1768,11 +1884,8 @@
         }
         const v = thinkSel.value;
         let show = false;
-        if (v === 'max') show = true;
-        else {
-            const parsed = parseInt(v, 10);
-            if (!isNaN(parsed) && parsed > 10000) show = true;
-        }
+        const parsed = parseInt(v, 10);
+        if (!isNaN(parsed) && parsed > 10000) show = true;
         warnEl.style.display = show ? 'block' : 'none';
     }
 
