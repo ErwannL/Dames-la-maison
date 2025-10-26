@@ -72,16 +72,61 @@ jobs:
     - name: Publish Release
       if: always()
       run: |
+        set -euo pipefail
         API="https://api.github.com/repos/${{ github.repository }}"
         TAG="${{ github.ref_name }}"
-        echo "Looking up release for tag $TAG"
-        RELEASE_JSON=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" "$API/releases/tags/$TAG")
-        RELEASE_ID=$(echo "$RELEASE_JSON" | jq -r .id)
-        if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
-          echo "No release found for tag $TAG. Exiting with success (nothing to publish)."
+        TOKEN="${{ secrets.GITHUB_TOKEN }}"
+        APK_PATH="app/build/outputs/apk/release/DamesLaMaison-${{ github.ref_name }}.apk"
+
+        echo "Ensuring release for tag $TAG is published (will retry)..."
+
+        # Retry loop: try to locate the release by tag and publish it if it's a draft
+        RETRIES=5
+        SLEEP=2
+        for i in $(seq 1 $RETRIES); do
+          echo "Attempt $i: Looking up release for tag $TAG"
+          RELEASE_JSON=$(curl -s -H "Authorization: token $TOKEN" "$API/releases/tags/$TAG")
+          RELEASE_ID=$(echo "$RELEASE_JSON" | jq -r .id)
+          if [ -n "$RELEASE_ID" ] && [ "$RELEASE_ID" != "null" ]; then
+            echo "Found release id=$RELEASE_ID"
+            DRAFT=$(echo "$RELEASE_JSON" | jq -r .draft)
+            if [ "$DRAFT" = "true" ]; then
+              echo "Publishing release id=$RELEASE_ID"
+              curl -s -X PATCH -H "Authorization: token $TOKEN" -H "Content-Type: application/json" \
+                -d '{"draft":false,"prerelease":false}' "$API/releases/$RELEASE_ID" | jq .
+            else
+              echo "Release is already published"
+            fi
+            exit 0
+          fi
+          echo "Release not found yet, sleeping $SLEEP s and will retry..."
+          sleep $SLEEP
+          SLEEP=$((SLEEP * 2))
+        done
+
+        echo "Release not found after $RETRIES attempts — creating a new published release and uploading the APK (if present)."
+
+        # Create a non-draft release
+        CREATE_JSON=$(curl -s -X POST -H "Authorization: token $TOKEN" -H "Content-Type: application/json" \
+          -d "{\"tag_name\":\"$TAG\",\"name\":\"$TAG\",\"body\":\"Release $TAG\",\"draft\":false,\"prerelease\":false}" \
+          "$API/releases")
+        echo "$CREATE_JSON" | jq .
+        NEW_ID=$(echo "$CREATE_JSON" | jq -r .id)
+        UPLOAD_URL=$(echo "$CREATE_JSON" | jq -r .upload_url)
+        if [ -z "$NEW_ID" ] || [ "$NEW_ID" = "null" ]; then
+          echo "Failed to create release. Exiting (nothing more to do)."
+          exit 0
+        fi
+
+        # Upload APK asset if it exists
+        if [ -f "$APK_PATH" ]; then
+          ASSET_NAME=$(basename "$APK_PATH")
+          # upload_url contains a template like: https://uploads.github.com/repos/:owner/:repo/releases/:id/assets{?name,label}
+          UPLOAD_URL_CLEAN="${UPLOAD_URL%\{*}"
+          echo "Uploading asset $ASSET_NAME to release $NEW_ID"
+          curl -s -H "Authorization: token $TOKEN" -H "Content-Type: application/octet-stream" \
+            --data-binary @"$APK_PATH" "$UPLOAD_URL_CLEAN?name=$ASSET_NAME" | jq .
         else
-          echo "Publishing release id=$RELEASE_ID"
-          curl -s -X PATCH -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" -H "Content-Type: application/json" \
-            -d '{"draft":false,"prerelease":false}' "$API/releases/$RELEASE_ID" | jq .
+          echo "APK not found at $APK_PATH; skipping asset upload."
         fi
       shell: bash
