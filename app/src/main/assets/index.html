@@ -408,19 +408,36 @@
           /* Red player: pastel pink for previous, deeper red for destination */
           .square.last-from-red { background: linear-gradient(0deg, rgba(255, 235, 238, 0.85), rgba(255, 235, 238, 0.85)) !important; box-shadow: inset 0 0 0 2px rgba(255, 179, 186, 0.45) !important; }
           .square.last-to-red { background: linear-gradient(0deg, rgba(255, 115, 115, 0.18), rgba(255, 80, 80, 0.18)) !important; box-shadow: inset 0 0 0 4px rgba(200,30,30,0.72) !important; }
-          .square.last-to-red .piece { transform: scale(1.04); }
+          /* Avoid transform scaling on last-moved piece so :hover remains accurate. Use a soft shadow instead. */
+          .square.last-to-red .piece { box-shadow: 0 8px 20px rgba(200,30,30,0.18); }
 
           /* Black player: pastel gray for previous, stronger dark outline for destination */
           .square.last-from-black { background: linear-gradient(0deg, rgba(245,245,245,0.85), rgba(245,245,245,0.85)) !important; box-shadow: inset 0 0 0 2px rgba(200,200,200,0.45) !important; }
           .square.last-to-black { background: linear-gradient(0deg, rgba(80,80,80,0.12), rgba(80,80,80,0.12)) !important; box-shadow: inset 0 0 0 4px rgba(40,40,40,0.85) !important; }
-          .square.last-to-black .piece { transform: scale(1.04); filter: drop-shadow(0 0 6px rgba(0,0,0,0.35)); }
+          .square.last-to-black .piece { box-shadow: 0 8px 20px rgba(0,0,0,0.18); filter: drop-shadow(0 0 6px rgba(0,0,0,0.18)); }
 
           /* Fallback subtle highlight if color is not set */
           .square.last-from { box-shadow: inset 0 0 0 3px rgba(255,215,0,0.16); }
           .square.last-to { box-shadow: inset 0 0 0 4px rgba(255,215,0,0.24); }
 
-        @keyframes lastMovePulse { 0%{transform:scale(1)}50%{transform:scale(1.02)}100%{transform:scale(1)} }
-        .square.last-to .piece { animation: lastMovePulse 700ms ease; }
+    /* subtle pulse on last-to using shadow only (avoid transform so hover isn't mimicked) */
+    @keyframes lastMovePulse { 0%{box-shadow:none}50%{box-shadow:0 10px 28px rgba(0,0,0,0.12)}100%{box-shadow:none} }
+    .square.last-to .piece { animation: lastMovePulse 700ms ease; }
+
+        /* When a square is both a "last-move" highlight and a valid-move (green),
+           prefer the valid-move appearance so the player sees available moves clearly.
+           This also ensures the green valid-move overrides a selected square. */
+        .square.valid-move.last-from,
+        .square.valid-move.last-to,
+        .square.valid-move.last-from-red,
+        .square.valid-move.last-to-red,
+        .square.valid-move.last-from-black,
+        .square.valid-move.last-to-black,
+        .square.valid-move.selected,
+        .square.valid-move.selected .piece {
+            background: #90ee90 !important;
+            box-shadow: none !important;
+        }
     </style>
 
     <script>
@@ -513,6 +530,31 @@
     const persistentBestMoves = new Map();
     // Background precompute handle to avoid overlapping background tasks
     let persistentBackgroundTimeout = null;
+    // History heuristic: Map<moveKey, score> to reward moves that caused cutoffs in previous searches
+    const historyHeuristic = new Map();
+    // Piece-square tables to favor center and advancement for pawns
+    const PST = {
+        man: [
+            [0,  0,  0,  0,  0,  0,  0,  0],
+            [5, 10, 10, -5, -5, 10, 10,  5],
+            [4,  8, 12,  0,  0, 12,  8,  4],
+            [3,  6, 10,  6,  6, 10,  6,  3],
+            [3,  6, 10,  6,  6, 10,  6,  3],
+            [4,  8, 12,  0,  0, 12,  8,  4],
+            [5, 10, 10, -5, -5, 10, 10,  5],
+            [0,  0,  0,  0,  0,  0,  0,  0]
+        ],
+        king: [
+            [0,  2,  4,  6,  6,  4,  2, 0],
+            [2,  4,  6,  8,  8,  6,  4, 2],
+            [4,  6,  8, 10, 10,  8,  6, 4],
+            [6,  8, 10, 12, 12, 10,  8, 6],
+            [6,  8, 10, 12, 12, 10,  8, 6],
+            [4,  6,  8, 10, 10,  8,  6, 4],
+            [2,  4,  6,  8,  8,  6,  4, 2],
+            [0,  2,  4,  6,  6,  4,  2, 0]
+        ]
+    };
     // Bot countdown state (used to display a countdown while the bot "thinks")
     let botCountdownInterval = null;
     let botCountdownTimeout = null;
@@ -1254,26 +1296,39 @@
         }
 
         function moveHeuristic(m) {
-            // Improved lightweight heuristic for move ordering in timed search
+            // Enhanced heuristic for ordering: captures/promotions, PST, centralization and history
             let s = 0;
             const fromPiece = board[m.fromRow] && board[m.fromRow][m.fromCol];
-            const toPiece = board[m.toRow] && board[m.toRow][m.toCol];
             if (m.isCapture) {
-                // reward captures strongly; prefer capturing kings
                 const captured = (m.capturedRow !== undefined) ? (board[m.capturedRow] && board[m.capturedRow][m.capturedCol]) : null;
-                if (captured) s += (captured.isKing ? 300 : 120);
-                else s += 120;
+                if (captured) s += (captured.isKing ? 400 : 180);
+                else s += 140;
             }
-            if (fromPiece && fromPiece.isKing) s += 60; // kings are powerful movers
-            // promotion opportunity (landing on last rank)
+            if (fromPiece && fromPiece.isKing) s += 100;
             if (fromPiece && !fromPiece.isKing) {
-                if ((fromPiece.color === 'red' && m.toRow === 0) || (fromPiece.color === 'black' && m.toRow === 7)) {
-                    s += 200;
+                if ((fromPiece.color === 'red' && m.toRow === 0) || (fromPiece.color === 'black' && m.toRow === 7)) s += 200;
+                // small advancement bonus for pawns
+                if (fromPiece.color === 'red') s += (fromPiece.row - m.toRow) * 4;
+                else s += (m.toRow - fromPiece.row) * 4;
+            }
+            // piece-square table bonus
+            if (fromPiece) {
+                const toRow = m.toRow;
+                const toCol = m.toCol;
+                if (fromPiece.isKing) {
+                    s += (PST.king[toRow] && PST.king[toRow][toCol]) || 0;
+                } else {
+                    // normalize man table for black by flipping rows
+                    const rr = fromPiece.color === 'red' ? toRow : (7 - toRow);
+                    s += (PST.man[rr] && PST.man[rr][toCol]) || 0;
                 }
             }
-            // small centralization bonus
+            // centralization bonus
             const centerDist = Math.abs(3.5 - m.toCol) + Math.abs(3.5 - m.toRow);
-            s += Math.max(0, 20 - centerDist * 3);
+            s += Math.max(0, 30 - centerDist * 4);
+            // history heuristic bonus
+            const key = `${m.fromRow},${m.fromCol}-${m.toRow},${m.toCol}`;
+            s += Math.min(historyHeuristic.get(key) || 0, 500);
             return s;
         }
         moves.sort((a,b) => moveHeuristic(b) - moveHeuristic(a));
@@ -1337,6 +1392,13 @@
                 if (score > bestScore) {
                     bestScore = score;
                     bestMove = move;
+                    try {
+                        // Reward this move in the history heuristic to improve ordering later
+                        const mk = `${move.fromRow},${move.fromCol}-${move.toRow},${move.toCol}`;
+                        const prev = historyHeuristic.get(mk) || 0;
+                        // larger depth -> larger weight
+                        historyHeuristic.set(mk, prev + depth * depth);
+                    } catch (e) { /* non-critical */ }
                 }
             }
 
@@ -1416,32 +1478,54 @@
     function startBackgroundPrecompute(color) {
         // cancel any existing scheduled precompute so we don't pile up work
         if (persistentBackgroundTimeout) {
-            clearTimeout(persistentBackgroundTimeout);
+            try {
+                if (persistentBackgroundTimeout.type === 'idle' && window.cancelIdleCallback) {
+                    cancelIdleCallback(persistentBackgroundTimeout.id);
+                } else {
+                    clearTimeout(persistentBackgroundTimeout.id);
+                }
+            } catch (e) {}
             persistentBackgroundTimeout = null;
         }
 
         // Only meaningful for hard level
         if (CONFIG.botLevel !== 'hard') return;
 
-        // schedule after a short idle delay (100ms) so the UI can finish rendering
-        persistentBackgroundTimeout = setTimeout(() => {
+        // Use requestIdleCallback when available so background work runs when the browser is idle.
+        // Fallback to a delayed timeout so rendering and immediate UI work finish first.
+        const scheduleFn = (cb) => {
+            if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+                const id = requestIdleCallback(cb, { timeout: 3000 });
+                persistentBackgroundTimeout = { type: 'idle', id };
+            } else {
+                const id = setTimeout(cb, 2000);
+                persistentBackgroundTimeout = { type: 'timeout', id };
+            }
+        };
+
+        scheduleFn(() => {
             try {
-                const timeLimit = (() => {
+                const configured = (() => {
                     const p = parseInt(CONFIG.botThinkTime, 10);
                     return (!isNaN(p) && p > 0) ? Math.min(p, MAX_BOT_THINK_MS) : 5000;
                 })();
 
-                // Use a moderate depth for background improvement; keep it bounded to avoid freezing
-                const backgroundDepth = 10;
-                console.log('Starting background precompute for', color, 'timeLimit=', timeLimit, 'depth=', backgroundDepth);
+                // Keep background work conservative so it doesn't freeze the UI for long.
+                const timeLimit = Math.min(configured, 1500); // ms
+                const backgroundDepth = 6;
+                console.log('Starting background precompute (idle) for', color, 'timeLimit=', timeLimit, 'depth=', backgroundDepth);
                 // run a timed search to populate/extend the persistent cache
-                const best = getBestMoveTimed(color, backgroundDepth, timeLimit);
-                console.log('Background precompute finished, best was', best);
+                try {
+                    const best = getBestMoveTimed(color, backgroundDepth, timeLimit);
+                    console.log('Background precompute finished, best was', best);
+                } catch (e) {
+                    console.warn('Background precompute inner failed', e);
+                }
             } catch (e) {
                 console.warn('Background precompute failed', e);
             }
             persistentBackgroundTimeout = null;
-        }, 100);
+        });
     }
 
     // Return configured bot think time in milliseconds (clamped).
@@ -1567,26 +1651,54 @@
     }
 
     function evaluateBoard(color) {
+        // Composite evaluation: material, PST, mobility, capture potential, king safety
         let score = 0;
+        let myMaterial = 0, oppMaterial = 0;
+        let myMob = 0, oppMob = 0;
+        let myCaptures = 0, oppCaptures = 0;
+
         for (let row = 0; row < ROWS; row++) {
             for (let col = 0; col < COLS; col++) {
                 const piece = board[row][col];
-                if (piece) {
-                    // stronger piece values for harder engine
-                    const value = piece.isKing ? 320 : 100;
-                    const positionBonus = piece.color === 'black' ? row * 4 : (7 - row) * 4;
-                    if (piece.color === color) {
-                        score += value + positionBonus;
-                    } else {
-                        score -= value + positionBonus;
-                    }
+                if (!piece) continue;
+                const sign = piece.color === color ? 1 : -1;
+                const matVal = piece.isKing ? 1000 : 100;
+                // material
+                score += sign * matVal;
+                // piece-square table contribution
+                if (piece.isKing) score += sign * ((PST.king[row] && PST.king[row][col]) || 0);
+                else {
+                    const rr = piece.color === 'red' ? row : (7 - row);
+                    score += sign * ((PST.man[rr] && PST.man[rr][col]) || 0);
                 }
+                // advancement bonus for pawns
+                if (!piece.isKing) {
+                    if (piece.color === 'red') score += sign * (7 - row) * 6;
+                    else score += sign * row * 6;
+                }
+                // count material separately for diagnostics/future use
+                if (piece.color === color) myMaterial += matVal; else oppMaterial += matVal;
             }
         }
-        // mobility bonus: number of moves for 'color' minus opponent
-        const myMoves = getAllValidMoves(color).length;
-        const oppMoves = getAllValidMoves(color === 'red' ? 'black' : 'red').length;
-        score += (myMoves - oppMoves) * 8;
+
+        // Mobility and capture potential
+        myMob = getAllValidMoves(color).length;
+        oppMob = getAllValidMoves(color === 'red' ? 'black' : 'red').length;
+        myCaptures = getAllValidMoves(color).filter(m => m.isCapture).length;
+        oppCaptures = getAllValidMoves(color === 'red' ? 'black' : 'red').filter(m => m.isCapture).length;
+
+        score += (myMob - oppMob) * 12;
+        score += (myCaptures - oppCaptures) * 180;
+
+        // If one side is far ahead materially, increase mobility importance
+        const matDiff = myMaterial - oppMaterial;
+        if (Math.abs(matDiff) > 200) score += Math.sign(matDiff) * 50;
+
+        // Slight randomness tie-breaker by stable hash so engine is deterministic but varied across positions
+        // (use zobrist key low bits)
+        const key = ZOBRIST.computeKey(board) & 0xff;
+        score += (key % 3) - 1;
+
         return score;
     }
 
